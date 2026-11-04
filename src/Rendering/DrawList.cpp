@@ -34,6 +34,52 @@ namespace {
 
 } // namespace
 
+ClipHierarchyResult BuildClipHierarchy(std::span<const ClipNode> nodes) {
+    ClipHierarchyResult result;
+    result.nodeClipIndices.assign(nodes.size(), NoClipIndex);
+    result.effectiveRects.reserve(nodes.size());
+    std::vector<std::uint32_t> effectiveIndex(nodes.size(), NoClipIndex);
+
+    for (std::size_t i = 0; i < nodes.size(); ++i) {
+        const ClipNode& node = nodes[i];
+        if (node.parentIndex != NoClipIndex && node.parentIndex >= i) {
+            result.valid = false;
+            return result;
+        }
+        if (!node.enabled) {
+            if (node.parentIndex != NoClipIndex)
+                effectiveIndex[i] = effectiveIndex[node.parentIndex];
+            result.nodeClipIndices[i] = effectiveIndex[i];
+            continue;
+        }
+        if (!ValidClip(node.rect)) {
+            result.valid = false;
+            return result;
+        }
+
+        ClipRectGPU effective = node.rect;
+        if (node.parentIndex != NoClipIndex) {
+            const std::uint32_t parentClip = effectiveIndex[node.parentIndex];
+            if (parentClip != NoClipIndex) {
+                const ClipRectGPU& parent = result.effectiveRects[parentClip];
+                effective.minX = std::max(effective.minX, parent.minX);
+                effective.minY = std::max(effective.minY, parent.minY);
+                effective.maxX = std::min(effective.maxX, parent.maxX);
+                effective.maxY = std::min(effective.maxY, parent.maxY);
+            }
+        }
+        if (result.effectiveRects.size() >= NoClipIndex) {
+            result.valid = false;
+            return result;
+        }
+        const auto index = static_cast<std::uint32_t>(result.effectiveRects.size());
+        result.effectiveRects.push_back(effective);
+        effectiveIndex[i] = index;
+        result.nodeClipIndices[i] = index;
+    }
+    return result;
+}
+
 bool IsFramePacketValid(const FramePacket& packet) noexcept {
     for (const ClipRectGPU& clip : packet.clipRects) {
         if (!ValidClip(clip)) return false;

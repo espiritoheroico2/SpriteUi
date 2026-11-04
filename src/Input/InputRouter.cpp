@@ -32,6 +32,7 @@ const HitTarget* UIEventRouter::HitTest(
             target.localSize.y <= 0.0f || !target.localToScreen.IsFinite()) {
             continue;
         }
+        if (target.clipEnabled && !target.clipRectLogical.Contains(screenPosition)) continue;
         const auto screenToLocal = target.localToScreen.Inverse();
         if (!screenToLocal) continue;
 
@@ -99,6 +100,8 @@ bool UIEventRouter::PushBubbledEvent(
             local = inverse->TransformPoint(input.pointerPositionLogical);
             inside = IsFinite(local) && local.x >= 0.0f && local.y >= 0.0f &&
                      local.x < current->localSize.x && local.y < current->localSize.y;
+            if (inside && current->clipEnabled)
+                inside = current->clipRectLogical.Contains(input.pointerPositionLogical);
         }
         PushEvent(events, type, *current, input, local, delta, inside);
         consumed = consumed || current->blocksInput;

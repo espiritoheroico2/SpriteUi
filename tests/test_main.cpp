@@ -515,6 +515,7 @@ void TestRendererAbiPremultiplicationAndBatching() {
 
 // Layout engine regression tests
 #include "SpriteUi/Layout/Layout.hpp"
+#include "SpriteUi/Layout/LayoutTree.hpp"
 static void TestFlexLayout() {
     using namespace ToolEngine::SpriteUi;
     LayoutNode root; root.style.direction=LayoutDirection::Row; root.style.width={SizeMode::Fixed,300}; root.style.height={SizeMode::Fixed,100}; root.style.gap=10;
@@ -528,8 +529,68 @@ static void TestFlexLayout() {
     CHECK(stats.measured==3 && stats.arranged==3);
 }
 
+
+static void TestLayoutTreeAndAlignment() {
+    using namespace ToolEngine::SpriteUi;
+    LayoutTree tree;
+    FlexItem rootStyle;
+    rootStyle.width={SizeMode::Fixed,200};
+    rootStyle.height={SizeMode::Fixed,100};
+    rootStyle.direction=LayoutDirection::Row;
+    rootStyle.gap=10;
+    const UIHandle root=tree.Create({},rootStyle);
+    FlexItem childStyle;
+    childStyle.width={SizeMode::Fixed,50};
+    childStyle.height={SizeMode::Fixed,20};
+    childStyle.alignItems=AlignItems::Center;
+    const UIHandle child=tree.Create(root,childStyle);
+    const UIHandle grandchild=tree.Create(child,childStyle);
+    CHECK(root.IsValid() && child.IsValid() && grandchild.IsValid());
+    CHECK(!tree.Create({123456u,1u},childStyle).IsValid());
+    tree.Layout({{0,0},{200,100}});
+    CHECK(Near(tree.Get(child)->node.rect.position.y,40.0f));
+    CHECK(tree.Remove(child));
+    CHECK(tree.Get(child)==nullptr);
+    CHECK(tree.Get(grandchild)==nullptr);
+    CHECK(tree.Get(root)!=nullptr);
+    CHECK(!tree.Remove(child));
+}
+
+
+static void TestClipHierarchyAndInputClip() {
+    using namespace ToolEngine::SpriteUi;
+    using namespace ToolEngine::SpriteUi::Rendering;
+    const ClipNode nodes[] = {
+        {{0,0,100,100}, NoClipIndex, true},
+        {{25,25,125,125}, 0, true},
+        {{0,0,0,0}, 1, false}
+    };
+    const auto clips=BuildClipHierarchy(nodes);
+    CHECK(clips.valid);
+    CHECK(clips.effectiveRects.size()==2);
+    CHECK(clips.nodeClipIndices[2]==clips.nodeClipIndices[1]);
+    CHECK(Near(clips.effectiveRects[1].minX,25));
+    CHECK(Near(clips.effectiveRects[1].maxX,100));
+    const ClipNode invalid[] = {{{0,0,1,1},1,true}};
+    CHECK(!BuildClipHierarchy(invalid).valid);
+
+    Input::HitTarget target;
+    target.handle={7,1};
+    target.localSize={100,100};
+    target.clipEnabled=true;
+    target.clipRectLogical={{0,0},{50,50}};
+    Input::UIInputSnapshot input;
+    input.pointerPositionLogical={75,75};
+    input.frameId=1;
+    Input::UIEventRouter router;
+    const auto events=router.Process(input,std::span<const Input::HitTarget>(&target,1));
+    CHECK(events.empty());
+}
+
 int main() {
     TestFlexLayout();
+    TestClipHierarchyAndInputClip();
+    TestLayoutTreeAndAlignment();
     TestAnchorsAndTransforms();
     TestInputRouterClickAndCapture();
     TestInputRouterCancelAndOcclusion();

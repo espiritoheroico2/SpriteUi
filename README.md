@@ -1,6 +1,6 @@
 # SpriteUI
 
-**Versão:** 0.1.0 — Core MVP C++20, baseado na especificação V4.2.
+**Versão:** 0.3.0 — Layout Tree + Clip Hierarchy C++20, baseado na especificação V4.2.
 
 SpriteUI é o início executável de uma biblioteca de interface 2D orientada a dados. O núcleo matemático, input, widgets lógicos, animação e extração de comandos são independentes de ECS e de API gráfica, para que Flecs e Diligent possam ser integrados por adaptadores sem contaminar os contratos públicos.
 
@@ -22,6 +22,9 @@ SpriteUI é o início executável de uma biblioteca de interface 2D orientada a 
 - ToonMotion básico com easing, `Override`/`Queue`/`Ignore`, pausa/cancelamento e shake sem drift.
 - Flags de invalidação por subsistema.
 - Extração de instâncias, ordenação visual e batching apenas entre comandos consecutivos compatíveis.
+- Árvore de layout com relações explícitas, remoção recursiva segura e validação de parent handles.
+- Alinhamento transversal de itens (Stretch/Start/Center/End).
+- Interseção de clipping hierárquico para renderização e clip bounds em hit-testing.
 - Validação estrutural de `FramePacket` antes da submissão.
 - Shader HLSL de referência alinhado à ABI.
 - `NullRenderBackend`, exemplo CLI e testes automatizados.
@@ -30,8 +33,8 @@ SpriteUI é o início executável de uma biblioteca de interface 2D orientada a 
 
 | Módulo | Estado |
 |---|---|
-| Flexbox completo, Measure/Arrange recursivo e min/max iterativo | Pendente |
-| Árvore de UI, Canvas, clipping hierárquico e virtualização | Pendente |
+| Flexbox completo, distribuição iterativa de grow/shrink e min/max freeze | Parcial: subset Measure/Arrange implementado |
+| Árvore de UI, Canvas e virtualização | Parcial: árvore de layout e clipping hierárquico básico implementados |
 | Flecs ECS adapter | Pendente |
 | Diligent Engine backend, buffers reais e fences | Pendente |
 | SDL3/GLFW, janela, clipboard, IME e input multi-pointer | Pendente |
@@ -163,4 +166,4 @@ tree.Create(root, child);
 tree.Layout({{0,0},{640,480}});
 ```
 
-Este é um primeiro subset de Flex; veja `docs/IMPLEMENTATION_STATUS.md` para limites e próximos passos.
+Este é um subset de Flex: o algoritmo atual não implementa ainda o ciclo completo de freeze/re-distribuição para min/max, wrap, justify-content, align-self ou percentuais com bases intrínsecas complexas. `BuildClipHierarchy` recebe clips em ordem pai-antes-do-filho e retorna interseções efetivas; o índice resultante pode ser atribuído a `UIRenderItem::clipIndex`. Para input, `HitTarget::clipRectLogical` deve receber o clip efetivo em coordenadas lógicas. Veja `docs/IMPLEMENTATION_STATUS.md` para limites e próximos passos.

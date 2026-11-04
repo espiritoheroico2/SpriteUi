@@ -4,7 +4,7 @@
 #include <optional>
 #include <unordered_map>
 namespace ToolEngine::SpriteUi {
-struct LayoutElement { UIHandle id{}; UIHandle parent{}; LayoutNode node{}; bool visible=true; };
+struct LayoutElement { UIHandle id{}; UIHandle parent{}; LayoutNode node{}; std::vector<UIHandle> children{}; bool visible=true; };
 class LayoutTree {
 public:
  UIHandle Create(UIHandle parent={},FlexItem style={});
@@ -21,5 +21,6 @@ private:
  std::vector<UIHandle> roots_;
  LayoutNode Build(UIHandle id);
  void Commit(UIHandle id,const LayoutNode& node);
+ void RemoveSubtree(UIHandle id);
 };
 } // namespace

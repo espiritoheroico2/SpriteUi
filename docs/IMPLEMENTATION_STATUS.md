@@ -1,4 +1,4 @@
-# Estado da implementação — SpriteUI 0.1.0 (Core MVP)
+# Estado da implementação — SpriteUI 0.3.0 (Layout Tree + Clip Hierarchy)
 
 Base normativa: documento SpriteUi V4.2 fornecido pelo utilizador. Esta implementação prioriza um núcleo C++20 compilável e testável antes de acoplar ECS, RHI ou bibliotecas externas.
 
@@ -16,6 +16,9 @@ Base normativa: documento SpriteUi V4.2 fornecido pelo utilizador. Esta implemen
 - ToonMotion básico com easing, políticas `Override`/`Queue`/`Ignore`, pausa/cancelamento e shake não cumulativo.
 - Flags de invalidação por subsistema.
 - Render extraction com ordenação visual estável, batches apenas consecutivos, clip rects e ABI de 80 bytes.
+- LayoutTree com filhos explícitos, validação de parent handle e remoção recursiva de subárvores.
+- Alinhamento transversal Stretch/Start/Center/End no layout subset.
+- `BuildClipHierarchy` com interseção de clips pai/filho; hit-testing respeita clip lógico efetivo.
 - Validador de `FramePacket`; `NullRenderBackend` rejeita pacotes incoerentes.
 - Shader HLSL de referência e exemplo executável sem GPU.
 - CMake com targets de instalação e `find_package(SpriteUI CONFIG)`.
@@ -27,8 +30,8 @@ Base normativa: documento SpriteUi V4.2 fornecido pelo utilizador. Esta implemen
 | Flecs ECS adapter | Pendente |
 | Diligent Engine backend e gestão real de buffers/fences | Pendente |
 | Compilação/validação de HLSL por DXC | Não validado neste ambiente (DXC ausente) |
-| Flexbox completo, Measure/Arrange recursivo, min/max e distribuição iterativa | Pendente |
-| Construção de árvore de UI, Canvas/Scene graph e clipping hierárquico | Pendente |
+| Flexbox completo (wrap, justify, freeze/re-distribuição min/max, percentuais intrínsecos) | Parcial: Measure/Arrange, grow/shrink simplificado e alinhamento transversal |
+| Canvas/Scene graph e clipping hierárquico completo/automático | Parcial: árvore de layout + utilitário de interseção; extração/transformação automática pendente |
 | Backend de janela/OS, SDL3/GLFW, multi-pointer e IME | Pendente |
 | HarfBuzz, FreeType, segmentação Grapheme, MSDF atlas e edição Unicode | Pendente |
 | Widgets visuais completos (button, dropdown, text input, tabs, docking) | Pendente; estado lógico de slider/scroll e input base já existe |
@@ -52,14 +55,14 @@ Base normativa: documento SpriteUi V4.2 fornecido pelo utilizador. Esta implemen
 ## Critérios mínimos verificados
 
 - ABI de GPU validada em compilação por `static_assert`.
-- Builds GCC Debug/Release, Clang e AddressSanitizer/UndefinedBehaviorSanitizer (quando configurados) executados durante o desenvolvimento.
-- 111 verificações unitárias para transformações, hit-testing transformado, foco/captura, cancelamento, bubbling, navegação semântica, widgets, animações, batching e validação de pacote.
+- Builds GCC Debug e Release executados nesta etapa; Clang e AddressSanitizer/UndefinedBehaviorSanitizer não foram reexecutados nesta entrega.
+- 130 verificações unitárias aprovadas, incluindo regressões de layout tree, remoção de subárvore, alinhamento e clipping/input.
 - Exemplos de linha de comando (`spriteui_hello` e `spriteui_interaction_demo`) executam com o núcleo CPU/`NullRenderBackend`.
 - Instalação CMake e consumo via `find_package` devem ser verificados no build final do pacote.
 
 ## Próxima ordem recomendada
 
-1. Flex layout + árvore de UI + clipping hierárquico.
+1. Completar algoritmo Flex (freeze/re-distribuição min/max, wrap e justify), integração automática de layout → hit targets → clip indices.
 2. Integração Flecs adapter e API de ciclo de frame.
 3. Backend Diligent com ring buffers, múltiplos frames em voo e fences.
 4. Window/input OS e widgets visuais.
@@ -68,13 +71,13 @@ Base normativa: documento SpriteUi V4.2 fornecido pelo utilizador. Esta implemen
 7. Integração Light Prism e efeitos.
 8. Benchmarks, profiling em hardware real e testes visuais automatizados.
 
-## Continuação — UI Core / Layout (2026-11-04)
+## Incremento 0.3.0 — Layout Tree + Clip Hierarchy (2026-11-04)
 
-Implementado primeiro incremento da recomendação: engine de layout retido em duas fases (`Measure`/`Arrange`) e árvore de layout por `UIHandle`.
+- Layout retido em duas fases (`Measure`/`Arrange`) com Row/Column, Fixed/Percent/Auto/Flex, grow/shrink simplificado, gap, padding, margens e min/max.
+- `LayoutTree` usa relações explícitas de filhos; rejeita parent handles inválidos e remove subárvores recursivamente.
+- Alinhamento transversal `Stretch`, `Start`, `Center` e `End`.
+- `BuildClipHierarchy` calcula interseções de clips em ordem pai-antes-do-filho e fornece índices para `UIRenderItem::clipIndex`.
+- `HitTarget` pode receber o clip efetivo em coordenadas lógicas; hit-test e estado `inside` no bubbling respeitam esse limite.
+- 130 checks aprovados em GCC Debug e Release. DXC não está instalado; shaders não foram compilados.
 
-- `LayoutEngine`: Row/Column, Fixed/Percent/Auto/Flex, grow/shrink, gap, padding, margins, min/max.
-- `LayoutTree`: criação/remoção de nós, atualização de estilo/visibilidade e layout de roots.
-- `LayoutStats`: contadores de nós medidos e organizados para instrumentação.
-- Teste de regressão para distribuição de espaço em Row com gap e grow.
-
-Limitações deste incremento: ainda não é Flexbox completo (wrap, align/justify, baseline, min-content/max-content e algoritmo iterativo de freeze/shrink ainda não implementados); árvore usa descoberta por varredura do mapa e deve ser otimizada com listas de filhos explícitas antes de workloads grandes. O layout está independente de Flecs e backend.
+Limitações restantes: Flexbox ainda não implementa wrap, justify-content, baseline, min-content/max-content nem algoritmo iterativo de freeze/re-distribuição min/max. A conversão automática da árvore de layout em hit targets e clip nodes permanece a próxima integração. O clipping é retangular e não cobre máscaras/rounded clips.

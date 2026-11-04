@@ -5,6 +5,7 @@
 #include <vector>
 namespace ToolEngine::SpriteUi {
 enum class LayoutDirection : uint8_t { Row, Column };
+enum class AlignItems : uint8_t { Stretch, Start, Center, End };
 enum class SizeMode : uint8_t { Fixed, Percent, Auto, Flex };
 struct Length { SizeMode mode=SizeMode::Auto; float value=0.0f; };
 struct Edges { float left=0, top=0, right=0, bottom=0; };
@@ -14,6 +15,7 @@ struct FlexItem {
     Edges margin{}, padding{};
     float gap=0.0f;
     LayoutDirection direction=LayoutDirection::Row;
+    AlignItems alignItems=AlignItems::Stretch;
     Vec2 minSize{0,0};
     Vec2 maxSize{std::numeric_limits<float>::infinity(),std::numeric_limits<float>::infinity()};
 };

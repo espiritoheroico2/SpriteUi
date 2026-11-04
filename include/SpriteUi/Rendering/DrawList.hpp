@@ -38,6 +38,24 @@ struct ClipRectGPU {
     float maxY = 0.0f;
 };
 
+inline constexpr std::uint32_t NoClipIndex = 0xFFFFFFFFu;
+
+struct ClipNode {
+    ClipRectGPU rect{};
+    std::uint32_t parentIndex = NoClipIndex;
+    bool enabled = true;
+};
+
+struct ClipHierarchyResult {
+    std::vector<ClipRectGPU> effectiveRects;
+    std::vector<std::uint32_t> nodeClipIndices;
+    bool valid = true;
+};
+
+// Nodes must be supplied in parent-before-child order. Each enabled node
+// intersects its own rectangle with its parent's effective clip.
+[[nodiscard]] ClipHierarchyResult BuildClipHierarchy(std::span<const ClipNode> nodes);
+
 struct DrawBatch {
     std::uint32_t firstInstance = 0;
     std::uint32_t instanceCount = 0;

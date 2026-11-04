@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(SpriteUI VERSION 0.1.0 LANGUAGES CXX)
+project(SpriteUI VERSION 0.3.0 LANGUAGES CXX)
 
 option(SPRITEUI_BUILD_EXAMPLES "Build SpriteUI examples" ON)
 option(SPRITEUI_BUILD_TESTS "Build SpriteUI tests" ON)

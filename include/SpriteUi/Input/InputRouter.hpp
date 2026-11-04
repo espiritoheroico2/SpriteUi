@@ -26,6 +26,8 @@ struct HitTarget {
     UIHandle parent{};
     Affine2D localToScreen{}; // Local pixel coordinates -> logical screen coordinates.
     Vec2 localSize{};         // Logical pixel dimensions in local space.
+    Rect clipRectLogical{};   // Effective ancestor clip; used when clipEnabled.
+    bool clipEnabled = false;
     std::uint64_t paintOrder = 0;
     bool visible = true;
     bool enabled = true;

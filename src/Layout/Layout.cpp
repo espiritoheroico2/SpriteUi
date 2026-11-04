@@ -64,14 +64,22 @@ void LayoutEngine::ArrangeImpl(LayoutNode& n,Rect b,LayoutStats* s) const {
   if(free>0 && totalGrow>0) main+=free*std::max(0.0f,c.style.grow)/totalGrow;
   else if(free<0 && totalShrink>0) main+=free*(std::max(0.0f,c.style.shrink)*bases[i])/totalShrink;
   main=std::max(0.0f,main);
-  float crossSize=std::min(innerCross,row?c.measured.y:c.measured.x);
-  float crossBefore=row?c.style.margin.top:c.style.margin.left;
-  float crossAfter=row?c.style.margin.bottom:c.style.margin.right;
-  crossSize=std::max(0.0f,innerCross-crossBefore-crossAfter);
+  const float crossBefore=row?c.style.margin.top:c.style.margin.left;
+  const float crossAfter=row?c.style.margin.bottom:c.style.margin.right;
+  const float crossAvailable=std::max(0.0f,innerCross-crossBefore-crossAfter);
+  const float measuredCross=row?c.measured.y:c.measured.x;
+  const float minCross=row?c.style.minSize.y:c.style.minSize.x;
+  const float maxCross=row?c.style.maxSize.y:c.style.maxSize.x;
+  float crossSize = c.style.alignItems==AlignItems::Stretch
+      ? crossAvailable : ClampSize(measuredCross,minCross,maxCross);
+  crossSize=std::min(crossSize,crossAvailable);
+  float crossOffset=crossBefore;
+  if(c.style.alignItems==AlignItems::Center) crossOffset+=std::max(0.0f,crossAvailable-crossSize)*0.5f;
+  else if(c.style.alignItems==AlignItems::End) crossOffset+=std::max(0.0f,crossAvailable-crossSize);
   cursor+=before;
   Rect cb;
-  if(row) cb={{cursor,b.position.y+n.style.padding.top+crossBefore},{main,crossSize}};
-  else cb={{b.position.x+n.style.padding.left+crossBefore,cursor},{crossSize,main}};
+  if(row) cb={{cursor,b.position.y+n.style.padding.top+crossOffset},{main,crossSize}};
+  else cb={{b.position.x+n.style.padding.left+crossOffset,cursor},{crossSize,main}};
   ArrangeImpl(c,cb,s);
   cursor+=main+after+n.style.gap;
  }
