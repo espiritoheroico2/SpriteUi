@@ -587,6 +587,292 @@ static void TestClipHierarchyAndInputClip() {
     CHECK(events.empty());
 }
 
+static void TestFontMetricsAndTextLayout() {
+    using namespace ToolEngine::SpriteUi::Text;
+
+    FontMetrics metrics;
+    metrics.fontSize = 20.0f;
+    metrics.unitsPerEm = 1000.0f;
+    metrics.ascent = 800.0f;
+    metrics.descent = -200.0f;
+    metrics.lineGap = 200.0f;
+    CHECK(metrics.IsValid());
+    CHECK(Near(metrics.GetScale(), 0.02f));
+    CHECK(Near(metrics.GetLineHeight(), 1200.0f));
+
+    FontMetrics invalidMetrics = metrics;
+    invalidMetrics.fontSize = -1.0f;
+    CHECK(!invalidMetrics.IsValid());
+
+    // Create 3 shaped glyphs
+    GlyphInstance glyphs[3];
+    // Glyph 0: 'A'
+    glyphs[0].glyphId = 65;
+    glyphs[0].clusterByteOffset = 0;
+    glyphs[0].xAdvance = 600.0f;
+    glyphs[0].planeBounds[0] = 50.0f;
+    glyphs[0].planeBounds[1] = 0.0f;
+    glyphs[0].planeBounds[2] = 550.0f;
+    glyphs[0].planeBounds[3] = 700.0f;
+    glyphs[0].uvRect[0] = 0.1f; glyphs[0].uvRect[1] = 0.1f; glyphs[0].uvRect[2] = 0.2f; glyphs[0].uvRect[3] = 0.2f;
+
+    // Glyph 1: 'B'
+    glyphs[1].glyphId = 66;
+    glyphs[1].clusterByteOffset = 1;
+    glyphs[1].xAdvance = 600.0f;
+    glyphs[1].planeBounds[0] = 50.0f;
+    glyphs[1].planeBounds[1] = 0.0f;
+    glyphs[1].planeBounds[2] = 550.0f;
+    glyphs[1].planeBounds[3] = 700.0f;
+    glyphs[1].uvRect[0] = 0.3f; glyphs[1].uvRect[1] = 0.1f; glyphs[1].uvRect[2] = 0.2f; glyphs[1].uvRect[3] = 0.2f;
+
+    // Glyph 2: 'C'
+    glyphs[2].glyphId = 67;
+    glyphs[2].clusterByteOffset = 2;
+    glyphs[2].xAdvance = 600.0f;
+    glyphs[2].planeBounds[0] = 50.0f;
+    glyphs[2].planeBounds[1] = 0.0f;
+    glyphs[2].planeBounds[2] = 550.0f;
+    glyphs[2].planeBounds[3] = 700.0f;
+    glyphs[2].uvRect[0] = 0.5f; glyphs[2].uvRect[1] = 0.1f; glyphs[2].uvRect[2] = 0.2f; glyphs[2].uvRect[3] = 0.2f;
+
+    TextLayoutConfig config;
+    config.fontSize = 20.0f;
+    auto layout = LayoutText(glyphs, metrics, config);
+    CHECK(layout.quads.size() == 3);
+    CHECK(layout.lineCount == 1);
+    CHECK(Near(layout.size.x, 36.0f)); // 3 * (600 * 0.02) = 36.0f
+
+    // Test caret position
+    Vec2 caret0 = GetCaretPosition(layout, 0, metrics);
+    CHECK(Near(caret0.x, layout.quads[0].bounds.position.x));
+    Vec2 caret1 = GetCaretPosition(layout, 1, metrics);
+    CHECK(Near(caret1.x, layout.quads[1].bounds.position.x));
+    Vec2 caretEnd = GetCaretPosition(layout, 999, metrics);
+    CHECK(Near(caretEnd.x, layout.quads[2].bounds.position.x + layout.quads[2].bounds.size.x));
+
+    // Test find cluster
+    CHECK(FindClusterAtPosition(layout, {1.0f, 5.0f}) == 0);
+    CHECK(FindClusterAtPosition(layout, {25.0f, 5.0f}) == 2);
+
+    // Test wrapping
+    config.maxWidth = 20.0f;
+    config.wrap = TextWrap::Char;
+    auto wrappedLayout = LayoutText(glyphs, metrics, config);
+    CHECK(wrappedLayout.lineCount >= 2);
+
+    // Test render item generation
+    UILayoutRect rect{{100.0f, 100.0f}, {200.0f, 50.0f}, true, false};
+    auto renderItems = GenerateTextRenderItems(layout, rect, {1, 1, 1, 1}, 5);
+    CHECK(renderItems.size() == 3);
+    CHECK(renderItems[0].textureSlice == 5);
+    CHECK(renderItems[0].flags == 0x2);
+    CHECK(Near(renderItems[0].layout.resolvedPosition.x, 100.0f + layout.quads[0].bounds.position.x));
+}
+
+static void TestWidgetsAndWindowInteraction() {
+    using namespace ToolEngine::SpriteUi::Widgets;
+    using namespace ToolEngine::SpriteUi::Input;
+
+    // Toggle
+    UIToggleComponent toggle;
+    CHECK(!toggle.isOn);
+    CHECK(toggle.Toggle());
+    CHECK(toggle.isOn);
+    toggle.disabled = true;
+    CHECK(!toggle.Toggle());
+    CHECK(toggle.isOn);
+
+    // TextInput
+    UITextInputComponent textInput;
+    textInput.hasFocus = true;
+    textInput.UpdateBlink(0.2f);
+    CHECK(textInput.IsCursorVisible(1.0f));
+    textInput.UpdateBlink(0.4f); // 0.6f >= 0.5f
+    CHECK(!textInput.IsCursorVisible(1.0f));
+
+    textInput.MoveCursor(5, false);
+    CHECK(textInput.cursorCluster == 5);
+    CHECK(!textInput.HasSelection());
+    textInput.MoveCursor(10, true);
+    CHECK(textInput.cursorCluster == 10);
+    CHECK(textInput.HasSelection());
+    CHECK(textInput.selectionStartCluster == 5);
+    textInput.ClearSelection();
+    CHECK(!textInput.HasSelection());
+
+    // Resize edges
+    Vec2 pos{50.0f, 50.0f};
+    Vec2 size{200.0f, 100.0f};
+    CHECK(GetResizeEdge(pos, size, {52.0f, 70.0f}) == ResizeEdge::Left);
+    CHECK(GetResizeEdge(pos, size, {248.0f, 70.0f}) == ResizeEdge::Right);
+    CHECK(GetResizeEdge(pos, size, {100.0f, 52.0f}) == ResizeEdge::Top);
+    CHECK(GetResizeEdge(pos, size, {100.0f, 148.0f}) == ResizeEdge::Bottom);
+    CHECK(GetResizeEdge(pos, size, {52.0f, 52.0f}) == ResizeEdge::TopLeft);
+    CHECK(GetResizeEdge(pos, size, {248.0f, 52.0f}) == ResizeEdge::TopRight);
+    CHECK(GetResizeEdge(pos, size, {52.0f, 148.0f}) == ResizeEdge::BottomLeft);
+    CHECK(GetResizeEdge(pos, size, {248.0f, 148.0f}) == ResizeEdge::BottomRight);
+    CHECK(GetResizeEdge(pos, size, {100.0f, 80.0f}) == ResizeEdge::None);
+
+    // Window Interaction (Dragging and Resizing)
+    UIWindowComponent window;
+    window.titleBarHeight = 25.0f;
+    window.minSize = {100.0f, 80.0f};
+    UILayoutRect layout{pos, size, true, false};
+    UIRectTransform transform;
+    transform.offsetMin = pos;
+    transform.offsetMax = pos + size;
+    UIPointerRoutingState routing;
+    UIHandle winHandle{42, 1};
+
+    // Click on titlebar
+    UIInputSnapshot clickTitle;
+    clickTitle.frameId = 1;
+    clickTitle.pointerPositionLogical = {100.0f, 60.0f}; // Inside titlebar
+    clickTitle.primaryPressed = true;
+    clickTitle.primaryDown = true;
+    CHECK(ProcessWindowInteraction(window, layout, transform, clickTitle, routing, winHandle));
+    CHECK(window.isDragging);
+    CHECK(routing.capturedEntity == winHandle);
+
+    // Drag move
+    UIInputSnapshot dragMove;
+    dragMove.frameId = 2;
+    dragMove.pointerPositionLogical = {110.0f, 70.0f};
+    dragMove.pointerDeltaLogical = {10.0f, 10.0f};
+    dragMove.primaryDown = true;
+    CHECK(ProcessWindowInteraction(window, layout, transform, dragMove, routing, winHandle));
+    CHECK(Near(layout.resolvedPosition.x, 60.0f));
+    CHECK(Near(layout.resolvedPosition.y, 60.0f));
+
+    // Release drag
+    UIInputSnapshot release;
+    release.frameId = 3;
+    release.primaryReleased = true;
+    CHECK(ProcessWindowInteraction(window, layout, transform, release, routing, winHandle));
+    CHECK(!window.isDragging);
+    CHECK(!routing.capturedEntity.IsValid());
+
+    // Resize bottom-right
+    UIInputSnapshot clickBR;
+    clickBR.frameId = 4;
+    clickBR.pointerPositionLogical = {layout.resolvedPosition.x + layout.resolvedSize.x - 2.0f,
+                                      layout.resolvedPosition.y + layout.resolvedSize.y - 2.0f};
+    clickBR.primaryPressed = true;
+    clickBR.primaryDown = true;
+    CHECK(ProcessWindowInteraction(window, layout, transform, clickBR, routing, winHandle));
+    CHECK(window.activeResizeEdge == ResizeEdge::BottomRight);
+    CHECK(routing.capturedEntity == winHandle);
+
+    // Drag resize
+    UIInputSnapshot resizeMove;
+    resizeMove.frameId = 5;
+    resizeMove.pointerDeltaLogical = {30.0f, 20.0f};
+    resizeMove.primaryDown = true;
+    CHECK(ProcessWindowInteraction(window, layout, transform, resizeMove, routing, winHandle));
+    CHECK(Near(layout.resolvedSize.x, 230.0f));
+    CHECK(Near(layout.resolvedSize.y, 120.0f));
+
+    // Release resize
+    release.frameId = 6;
+    CHECK(ProcessWindowInteraction(window, layout, transform, release, routing, winHandle));
+    CHECK(window.activeResizeEdge == ResizeEdge::None);
+}
+
+static void TestLayoutSceneBridge() {
+    using namespace ToolEngine::SpriteUi;
+
+    LayoutTree tree;
+    FlexItem containerStyle;
+    containerStyle.width = {SizeMode::Fixed, 400.0f};
+    containerStyle.height = {SizeMode::Fixed, 300.0f};
+    const UIHandle container = tree.Create({}, containerStyle);
+
+    FlexItem childStyle;
+    childStyle.width = {SizeMode::Fixed, 100.0f};
+    childStyle.height = {SizeMode::Fixed, 50.0f};
+    const UIHandle child = tree.Create(container, childStyle);
+
+    tree.Layout({{0, 0}, {400, 300}});
+
+    LayoutSceneBridge bridge;
+    ElementVisual containerVis;
+    containerVis.clipOverflow = true;
+    containerVis.tintPremultipliedLinear = {0.1f, 0.1f, 0.1f, 1.0f};
+    bridge.SetVisual(container, containerVis);
+
+    ElementVisual childVis;
+    childVis.tintPremultipliedLinear = {0.8f, 0.2f, 0.2f, 1.0f};
+    bridge.SetVisual(child, childVis);
+
+    auto result = bridge.Extract(tree);
+    CHECK(result.renderItems.size() == 2);
+    CHECK(result.hitTargets.size() == 2);
+    CHECK(result.clipHierarchy.valid);
+    CHECK(result.clipHierarchy.effectiveRects.size() == 1);
+    // Child should inherit clip index from container
+    CHECK(result.renderItems[1].clipIndex == 0);
+    CHECK(result.hitTargets[1].clipEnabled);
+    CHECK(Near(result.hitTargets[1].clipRectLogical.size.x, 400.0f));
+}
+
+static void TestUIConfigManager() {
+    using namespace ToolEngine::SpriteUi::Config;
+
+    const std::string validJson = R"({
+  "schemaVersion": 1,
+  "globalScale": 1.25,
+  "activeTheme": 2,
+  "enableVSync": true,
+  "windows": [
+    {
+      "name": "EditorHierarchy",
+      "offsetMinX": 10.0,
+      "offsetMinY": 20.0,
+      "offsetMaxX": 250.0,
+      "offsetMaxY": 500.0,
+      "isMinimized": false
+    }
+  ]
+})";
+
+    UISettingsConfig staged;
+    CHECK(UIConfigManager::ValidateAndStage(validJson, staged));
+    CHECK(staged.schemaVersion == 1);
+    CHECK(Near(staged.globalScale, 1.25f));
+    CHECK(staged.activeTheme == 2);
+    CHECK(staged.enableVSync == true);
+    CHECK(staged.windows.size() == 1);
+    CHECK(staged.windows[0].name == "EditorHierarchy");
+    CHECK(Near(staged.windows[0].offsetMax.x, 250.0f));
+
+    // Test commit
+    UISettingsConfig activeConfig;
+    UIConfigManager::Commit(activeConfig, staged);
+    CHECK(activeConfig.windows.size() == 1);
+    CHECK(Near(activeConfig.globalScale, 1.25f));
+
+    // Test rejection without schemaVersion
+    const std::string badJson = R"({
+  "globalScale": 2.0
+})";
+    UISettingsConfig badStaged;
+    CHECK(!UIConfigManager::ValidateAndStage(badJson, badStaged));
+
+    // Test serialization round-trip
+    std::string serialized = UIConfigManager::Serialize(activeConfig);
+    CHECK(serialized.find("\"schemaVersion\": 1") != std::string::npos);
+    UISettingsConfig roundTrip;
+    CHECK(UIConfigManager::ValidateAndStage(serialized, roundTrip));
+    CHECK(Near(roundTrip.globalScale, 1.25f));
+    CHECK(roundTrip.windows.size() == 1);
+
+    // Test ReadFiniteFloat sanitization
+    CHECK(Near(ReadFiniteFloat(5.0f, 1.0f, 0.0f, 10.0f), 5.0f));
+    CHECK(Near(ReadFiniteFloat(std::numeric_limits<float>::quiet_NaN(), 2.0f), 2.0f));
+    CHECK(Near(ReadFiniteFloat(100.0f, 1.0f, 0.0f, 10.0f), 10.0f));
+}
+
 int main() {
     TestFlexLayout();
     TestClipHierarchyAndInputClip();
@@ -605,6 +891,10 @@ int main() {
     TestToonMotion();
     TestTweenConflictPolicies();
     TestRendererAbiPremultiplicationAndBatching();
+    TestFontMetricsAndTextLayout();
+    TestWidgetsAndWindowInteraction();
+    TestLayoutSceneBridge();
+    TestUIConfigManager();
 
     if (failures != 0) {
         std::cerr << failures << " failure(s) in " << testsRun << " checks.\n";

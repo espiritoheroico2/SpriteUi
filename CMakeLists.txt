@@ -11,6 +11,10 @@ add_library(SpriteUI
     src/Rendering/DrawList.cpp
     src/Layout/Layout.cpp
     src/Layout/LayoutTree.cpp
+    src/Layout/LayoutBridge.cpp
+    src/Text/TextLayout.cpp
+    src/Widgets/Widgets.cpp
+    src/Config/UIConfig.cpp
 )
 add_library(SpriteUi::SpriteUI ALIAS SpriteUI)
 

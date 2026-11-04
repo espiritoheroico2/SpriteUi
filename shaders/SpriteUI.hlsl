@@ -53,14 +53,33 @@ VSOutput VSMain(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID)
     return output;
 }
 
+float Median(float r, float g, float b)
+{
+    return max(min(r, g), min(max(r, g), b));
+}
+
 float4 PSMain(VSOutput input) : SV_TARGET
 {
-    const float4 texel = SpriteTextures.Sample(
-        SpriteSampler, float3(input.uv, input.resourceIds.x));
+    float4 color = input.tint;
 
-    // Both texel and tint are premultiplied. Component-wise multiplication
-    // preserves Source-Over premultiplied-alpha semantics.
-    const float4 color = texel * input.tint;
+    const uint flags = input.resourceIds.w;
+    if ((flags & 0x2u) != 0u) // Flag_MSDFText
+    {
+        const float3 msd = SpriteTextures.Sample(
+            SpriteSampler, float3(input.uv, input.resourceIds.x)).rgb;
+        const float sd = Median(msd.r, msd.g, msd.b) - 0.5;
+        // Screen pixel distance derived from UV derivatives
+        const float2 unitRange = float2(4.0, 4.0) / max(fwidth(input.uv), float2(1e-5, 1e-5));
+        const float screenPxDistance = sd * 0.5 * (unitRange.x + unitRange.y);
+        const float textAlpha = clamp(screenPxDistance + 0.5, 0.0, 1.0);
+        color *= textAlpha;
+    }
+    else
+    {
+        const float4 texel = SpriteTextures.Sample(
+            SpriteSampler, float3(input.uv, input.resourceIds.x));
+        color *= texel;
+    }
 
     const uint clipIndex = input.resourceIds.z;
     if (clipIndex != 0xFFFFFFFFu)

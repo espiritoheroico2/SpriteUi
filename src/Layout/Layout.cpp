@@ -1,87 +1,212 @@
 #include "SpriteUi/Layout/Layout.hpp"
+
 #include <algorithm>
 #include <cmath>
+
 namespace ToolEngine::SpriteUi {
+
 namespace {
-float Resolve(Length l,float available,float measured) {
- switch(l.mode) {
- case SizeMode::Fixed: return std::max(0.0f,l.value);
- case SizeMode::Percent: return std::max(0.0f,available*l.value);
- case SizeMode::Flex: return std::max(0.0f,measured);
- case SizeMode::Auto: default: return std::max(0.0f,measured);
- }
+
+float ResolveLength(Length length, float available, float measured) noexcept {
+    switch (length.mode) {
+    case SizeMode::Fixed:
+        return std::max(0.0f, length.value);
+    case SizeMode::Percent:
+        return std::max(0.0f, available * length.value);
+    case SizeMode::Flex:
+    case SizeMode::Auto:
+    default:
+        return std::max(0.0f, measured);
+    }
 }
-float ClampSize(float x,float lo,float hi) {
- if(!std::isfinite(x)) x=0;
- return std::clamp(x,std::max(0.0f,lo),std::max(std::max(0.0f,lo),hi));
+
+float ClampSize(float value, float minVal, float maxVal) noexcept {
+    if (!std::isfinite(value)) value = 0.0f;
+    const float lo = std::max(0.0f, minVal);
+    const float hi = std::max(lo, maxVal);
+    return std::clamp(value, lo, hi);
 }
-}
-Vec2 LayoutEngine::Measure(LayoutNode& n,Vec2 a,LayoutStats* s) const { return MeasureImpl(n,a,s); }
-Vec2 LayoutEngine::MeasureImpl(LayoutNode& n,Vec2 a,LayoutStats* s) const {
- if(s) ++s->measured;
- float main=0,cross=0;
- const bool row=n.style.direction==LayoutDirection::Row;
- for(auto& c:n.children) {
-  Vec2 m=MeasureImpl(c,a,s);
-  float cm=row?m.x:m.y, cc=row?m.y:m.x;
-  float margins=row?c.style.margin.left+c.style.margin.right:c.style.margin.top+c.style.margin.bottom;
-  float crossMargins=row?c.style.margin.top+c.style.margin.bottom:c.style.margin.left+c.style.margin.right;
-  main+=cm+margins; cross=std::max(cross,cc+crossMargins);
- }
- if(!n.children.empty()) main+=n.style.gap*static_cast<float>(n.children.size()-1);
- Vec2 content=row?Vec2{main,cross}:Vec2{cross,main};
- content.x+=n.style.padding.left+n.style.padding.right;
- content.y+=n.style.padding.top+n.style.padding.bottom;
- n.measured={ClampSize(Resolve(n.style.width,a.x,content.x),n.style.minSize.x,n.style.maxSize.x),
-             ClampSize(Resolve(n.style.height,a.y,content.y),n.style.minSize.y,n.style.maxSize.y)};
- return n.measured;
-}
-void LayoutEngine::Arrange(LayoutNode& n,Rect b,LayoutStats* s) const { ArrangeImpl(n,b,s); }
-void LayoutEngine::ArrangeImpl(LayoutNode& n,Rect b,LayoutStats* s) const {
- if(s) ++s->arranged;
- n.rect=b;
- if(n.children.empty()) return;
- const bool row=n.style.direction==LayoutDirection::Row;
- float innerMain=(row?b.size.x:b.size.y)-(row?n.style.padding.left+n.style.padding.right:n.style.padding.top+n.style.padding.bottom);
- float innerCross=(row?b.size.y:b.size.x)-(row?n.style.padding.top+n.style.padding.bottom:n.style.padding.left+n.style.padding.right);
- innerMain=std::max(0.0f,innerMain); innerCross=std::max(0.0f,innerCross);
- float fixed= n.style.gap*static_cast<float>(n.children.size()-1), totalGrow=0,totalShrink=0;
- std::vector<float> bases; bases.reserve(n.children.size());
- for(auto& c:n.children) {
-  float base=row?c.measured.x:c.measured.y;
-  float margin=row?c.style.margin.left+c.style.margin.right:c.style.margin.top+c.style.margin.bottom;
-  base=std::max(0.0f,base); bases.push_back(base); fixed+=base+margin;
-  totalGrow+=std::max(0.0f,c.style.grow);
-  totalShrink+=std::max(0.0f,c.style.shrink)*base;
- }
- float free=innerMain-fixed;
- float cursor=(row?b.position.x+n.style.padding.left:b.position.y+n.style.padding.top);
- for(size_t i=0;i<n.children.size();++i) {
-  auto& c=n.children[i];
-  float before=row?c.style.margin.left:c.style.margin.top;
-  float after=row?c.style.margin.right:c.style.margin.bottom;
-  float main=bases[i];
-  if(free>0 && totalGrow>0) main+=free*std::max(0.0f,c.style.grow)/totalGrow;
-  else if(free<0 && totalShrink>0) main+=free*(std::max(0.0f,c.style.shrink)*bases[i])/totalShrink;
-  main=std::max(0.0f,main);
-  const float crossBefore=row?c.style.margin.top:c.style.margin.left;
-  const float crossAfter=row?c.style.margin.bottom:c.style.margin.right;
-  const float crossAvailable=std::max(0.0f,innerCross-crossBefore-crossAfter);
-  const float measuredCross=row?c.measured.y:c.measured.x;
-  const float minCross=row?c.style.minSize.y:c.style.minSize.x;
-  const float maxCross=row?c.style.maxSize.y:c.style.maxSize.x;
-  float crossSize = c.style.alignItems==AlignItems::Stretch
-      ? crossAvailable : ClampSize(measuredCross,minCross,maxCross);
-  crossSize=std::min(crossSize,crossAvailable);
-  float crossOffset=crossBefore;
-  if(c.style.alignItems==AlignItems::Center) crossOffset+=std::max(0.0f,crossAvailable-crossSize)*0.5f;
-  else if(c.style.alignItems==AlignItems::End) crossOffset+=std::max(0.0f,crossAvailable-crossSize);
-  cursor+=before;
-  Rect cb;
-  if(row) cb={{cursor,b.position.y+n.style.padding.top+crossOffset},{main,crossSize}};
-  else cb={{b.position.x+n.style.padding.left+crossOffset,cursor},{crossSize,main}};
-  ArrangeImpl(c,cb,s);
-  cursor+=main+after+n.style.gap;
- }
-}
+
 } // namespace
+
+Vec2 LayoutEngine::Measure(LayoutNode& node, Vec2 available, LayoutStats* stats) const {
+    return MeasureImpl(node, available, stats);
+}
+
+Vec2 LayoutEngine::MeasureImpl(LayoutNode& node, Vec2 available, LayoutStats* stats) const {
+    if (stats) ++stats->measured;
+
+    float mainAxis = 0.0f;
+    float crossAxis = 0.0f;
+    const bool isRow = (node.style.direction == LayoutDirection::Row);
+
+    for (auto& child : node.children) {
+        const Vec2 childMeasured = MeasureImpl(child, available, stats);
+        const float childMain = isRow ? childMeasured.x : childMeasured.y;
+        const float childCross = isRow ? childMeasured.y : childMeasured.x;
+
+        const float mainMargins = isRow
+            ? child.style.margin.left + child.style.margin.right
+            : child.style.margin.top + child.style.margin.bottom;
+        const float crossMargins = isRow
+            ? child.style.margin.top + child.style.margin.bottom
+            : child.style.margin.left + child.style.margin.right;
+
+        mainAxis += childMain + mainMargins;
+        crossAxis = std::max(crossAxis, childCross + crossMargins);
+    }
+
+    if (!node.children.empty()) {
+        mainAxis += node.style.gap * static_cast<float>(node.children.size() - 1);
+    }
+
+    Vec2 content = isRow ? Vec2{mainAxis, crossAxis} : Vec2{crossAxis, mainAxis};
+    content.x += node.style.padding.left + node.style.padding.right;
+    content.y += node.style.padding.top + node.style.padding.bottom;
+
+    node.measured = {
+        ClampSize(ResolveLength(node.style.width, available.x, content.x),
+                  node.style.minSize.x, node.style.maxSize.x),
+        ClampSize(ResolveLength(node.style.height, available.y, content.y),
+                  node.style.minSize.y, node.style.maxSize.y)
+    };
+
+    return node.measured;
+}
+
+void LayoutEngine::Arrange(LayoutNode& node, Rect bounds, LayoutStats* stats) const {
+    ArrangeImpl(node, bounds, stats);
+}
+
+void LayoutEngine::ArrangeImpl(LayoutNode& node, Rect bounds, LayoutStats* stats) const {
+    if (stats) ++stats->arranged;
+    node.rect = bounds;
+    if (node.children.empty()) return;
+
+    const bool isRow = (node.style.direction == LayoutDirection::Row);
+
+    const float padBeforeMain = isRow ? node.style.padding.left : node.style.padding.top;
+    const float padAfterMain  = isRow ? node.style.padding.right : node.style.padding.bottom;
+    const float padBeforeCross = isRow ? node.style.padding.top : node.style.padding.left;
+    const float padAfterCross  = isRow ? node.style.padding.bottom : node.style.padding.right;
+
+    float innerMain = (isRow ? bounds.size.x : bounds.size.y) - (padBeforeMain + padAfterMain);
+    float innerCross = (isRow ? bounds.size.y : bounds.size.x) - (padBeforeCross + padAfterCross);
+    innerMain = std::max(0.0f, innerMain);
+    innerCross = std::max(0.0f, innerCross);
+
+    float fixedMain = node.style.gap * static_cast<float>(node.children.size() - 1);
+    float totalGrow = 0.0f;
+    float totalShrink = 0.0f;
+
+    std::vector<float> bases;
+    bases.reserve(node.children.size());
+
+    for (auto& child : node.children) {
+        float base = isRow ? child.measured.x : child.measured.y;
+        float margin = isRow
+            ? child.style.margin.left + child.style.margin.right
+            : child.style.margin.top + child.style.margin.bottom;
+        base = std::max(0.0f, base);
+        bases.push_back(base);
+        fixedMain += base + margin;
+        totalGrow += std::max(0.0f, child.style.grow);
+        totalShrink += std::max(0.0f, child.style.shrink) * base;
+    }
+
+    const float free = innerMain - fixedMain;
+
+    float initialOffset = 0.0f;
+    float extraGap = 0.0f;
+
+    // Apply JustifyContent when free space remains and items don't grow
+    if (free > 0.0f && totalGrow <= 0.0f) {
+        switch (node.style.justifyContent) {
+        case JustifyContent::Center:
+            initialOffset = free * 0.5f;
+            break;
+        case JustifyContent::FlexEnd:
+            initialOffset = free;
+            break;
+        case JustifyContent::SpaceBetween:
+            if (node.children.size() > 1) {
+                extraGap = free / static_cast<float>(node.children.size() - 1);
+            }
+            break;
+        case JustifyContent::SpaceAround:
+            if (!node.children.empty()) {
+                const float share = free / static_cast<float>(node.children.size());
+                initialOffset = share * 0.5f;
+                extraGap = share;
+            }
+            break;
+        case JustifyContent::SpaceEvenly:
+            if (!node.children.empty()) {
+                const float step = free / static_cast<float>(node.children.size() + 1);
+                initialOffset = step;
+                extraGap = step;
+            }
+            break;
+        case JustifyContent::FlexStart:
+        default:
+            break;
+        }
+    }
+
+    float cursor = (isRow ? bounds.position.x : bounds.position.y) + padBeforeMain + initialOffset;
+
+    for (std::size_t i = 0; i < node.children.size(); ++i) {
+        auto& child = node.children[i];
+
+        const float beforeMarginMain = isRow ? child.style.margin.left : child.style.margin.top;
+        const float afterMarginMain  = isRow ? child.style.margin.right : child.style.margin.bottom;
+
+        float mainSize = bases[i];
+        if (free > 0.0f && totalGrow > 0.0f) {
+            mainSize += free * std::max(0.0f, child.style.grow) / totalGrow;
+        } else if (free < 0.0f && totalShrink > 0.0f) {
+            mainSize += free * (std::max(0.0f, child.style.shrink) * bases[i]) / totalShrink;
+        }
+        mainSize = std::max(0.0f, mainSize);
+
+        const float beforeMarginCross = isRow ? child.style.margin.top : child.style.margin.left;
+        const float afterMarginCross  = isRow ? child.style.margin.bottom : child.style.margin.right;
+        const float crossAvailable = std::max(0.0f, innerCross - beforeMarginCross - afterMarginCross);
+
+        const float measuredCross = isRow ? child.measured.y : child.measured.x;
+        const float minCross = isRow ? child.style.minSize.y : child.style.minSize.x;
+        const float maxCross = isRow ? child.style.maxSize.y : child.style.maxSize.x;
+
+        float crossSize = (child.style.alignItems == AlignItems::Stretch)
+            ? crossAvailable
+            : ClampSize(measuredCross, minCross, maxCross);
+        crossSize = std::min(crossSize, crossAvailable);
+
+        float crossOffset = beforeMarginCross;
+        if (child.style.alignItems == AlignItems::Center) {
+            crossOffset += std::max(0.0f, crossAvailable - crossSize) * 0.5f;
+        } else if (child.style.alignItems == AlignItems::End) {
+            crossOffset += std::max(0.0f, crossAvailable - crossSize);
+        }
+
+        cursor += beforeMarginMain;
+
+        Rect childBounds;
+        if (isRow) {
+            childBounds = {
+                {cursor, bounds.position.y + padBeforeCross + crossOffset},
+                {mainSize, crossSize}
+            };
+        } else {
+            childBounds = {
+                {bounds.position.x + padBeforeCross + crossOffset, cursor},
+                {crossSize, mainSize}
+            };
+        }
+
+        ArrangeImpl(child, childBounds, stats);
+        cursor += mainSize + afterMarginMain + node.style.gap + extraGap;
+    }
+}
+
+} // namespace ToolEngine::SpriteUi
