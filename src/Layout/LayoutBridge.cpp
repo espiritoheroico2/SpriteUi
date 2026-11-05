@@ -86,7 +86,7 @@ SceneExtractionResult LayoutSceneBridge::Extract(const LayoutTree& tree) const {
     // Traverse again to emit HitTargets and RenderItems in paint order
     std::uint64_t paintCounter = 0;
 
-    auto emitElement = [&](auto self, UIHandle id) -> void {
+    auto emitElement = [&](auto self, UIHandle id, UIHandle hitAncestor) -> void {
         const auto* elem = tree.Get(id);
         if (!elem || !elem->visible) return;
 
@@ -100,10 +100,13 @@ SceneExtractionResult LayoutSceneBridge::Extract(const LayoutTree& tree) const {
         }
 
         // HitTarget
-        if (visual == nullptr || visual->interactable) {
+        const bool emitsTarget = visual == nullptr || visual->interactable;
+        if (emitsTarget) {
             Input::HitTarget target;
             target.handle = id;
-            target.parent = elem->parent;
+            // Ancestral mais proximo que tambem possui HitTarget: o bubbling nao quebra
+            // quando um pai intermediario e nao interagivel.
+            target.parent = hitAncestor;
             target.localSize = elem->node.rect.size;
             target.localToScreen.tx = elem->node.rect.position.x;
             target.localToScreen.ty = elem->node.rect.position.y;
@@ -151,12 +154,12 @@ SceneExtractionResult LayoutSceneBridge::Extract(const LayoutTree& tree) const {
         }
 
         for (UIHandle child : elem->children) {
-            self(self, child);
+            self(self, child, emitsTarget ? id : hitAncestor);
         }
     };
 
     for (UIHandle root : tree.Roots()) {
-        emitElement(emitElement, root);
+        emitElement(emitElement, root, InvalidUIHandle);
     }
 
     return result;

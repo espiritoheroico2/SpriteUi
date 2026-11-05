@@ -44,6 +44,13 @@ struct TweenUpdate {
     std::vector<TweenCompleted> completed;
 };
 
+// Aplica opacidade a uma cor ja pre-multiplicada (V4.2 sec. 5): RGB e A escalam juntos,
+// preservando as proporcoes RGB/A sem degradar cores emissivas.
+[[nodiscard]] inline Vec4 ApplyOpacityPremultiplied(Vec4 premultipliedTint, float opacity) noexcept {
+    if (!IsFinite(premultipliedTint) || !IsFinite(opacity)) return {};
+    return premultipliedTint * Clamp01(opacity);
+}
+
 [[nodiscard]] float EvaluateEasing(Easing easing, float t) noexcept;
 [[nodiscard]] Vec2 EvaluateShake(
     float elapsed, float duration, Vec2 amplitude, float frequency = 38.0f) noexcept;

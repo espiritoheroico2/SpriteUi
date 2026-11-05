@@ -45,3 +45,4 @@ struct UILinePlot {
 };
 
 } // namespace ToolEngine::SpriteUi::Widgets
+

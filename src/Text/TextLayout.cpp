@@ -175,7 +175,8 @@ std::vector<Rendering::UIRenderItem> GenerateTextRenderItems(
     std::uint32_t atlasTextureSlice,
     std::uint32_t clipIndex,
     float zOrder,
-    std::uint64_t basePaintOrder)
+    std::uint64_t basePaintOrder,
+    UIHandle owner)
 {
     std::vector<Rendering::UIRenderItem> items;
     items.reserve(layout.quads.size());
@@ -187,6 +188,7 @@ std::vector<Rendering::UIRenderItem> GenerateTextRenderItems(
         }
 
         Rendering::UIRenderItem item;
+        item.handle = owner;
         item.layout.resolvedPosition = rect.resolvedPosition + quad.bounds.position;
         item.layout.resolvedSize = quad.bounds.size;
         item.layout.visible = rect.visible;

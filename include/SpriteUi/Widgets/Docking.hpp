@@ -53,6 +53,9 @@ public:
 
     Rect bounds{};
     UIHandle content{};
+    // Preenchido quando uma janela e solta em DockSlot::Center de um no folha ocupado.
+    // Nesse caso o conteudo visivel e tabs.GetActiveContent().
+    UITabGroupComponent tabs;
     float splitRatio = 0.5f;
     bool isSplit = false;
     LayoutDirection splitDirection = LayoutDirection::Row;
@@ -60,7 +63,13 @@ public:
     std::unique_ptr<UIDockNode> firstChild;
     std::unique_ptr<UIDockNode> secondChild;
 
-    // Splits this node into two children based on the chosen slot and ratio
+    // Conteudo efetivamente visivel num no folha (aba ativa, se houver grupo de abas).
+    [[nodiscard]] UIHandle VisibleContent() const noexcept {
+        return tabs.TabCount() > 0 ? tabs.GetActiveContent() : content;
+    }
+
+    // Splits this node into two children based on the chosen slot and ratio.
+    // Retorna false para nos ja divididos (divida um filho folha) ou parametros invalidos.
     bool Split(DockSlot slot, float ratio, UIHandle newContent);
 
     // Recursively recalculates rectangles for all dock splits
@@ -68,3 +77,4 @@ public:
 };
 
 } // namespace ToolEngine::SpriteUi::Widgets
+

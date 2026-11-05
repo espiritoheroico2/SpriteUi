@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(SpriteUI VERSION 0.3.0 LANGUAGES CXX)
+project(SpriteUI VERSION 0.5.1 LANGUAGES CXX)
 
 option(SPRITEUI_BUILD_EXAMPLES "Build SpriteUI examples" ON)
 option(SPRITEUI_BUILD_TESTS "Build SpriteUI tests" ON)
@@ -7,6 +7,7 @@ option(SPRITEUI_ENABLE_WARNINGS "Enable strict compiler warnings" ON)
 
 add_library(SpriteUI
     src/Input/InputRouter.cpp
+    src/Input/SpatialNavigation.cpp
     src/Animation/ToonMotion.cpp
     src/Rendering/DrawList.cpp
     src/Layout/Layout.cpp
@@ -14,6 +15,10 @@ add_library(SpriteUI
     src/Layout/LayoutBridge.cpp
     src/Text/TextLayout.cpp
     src/Widgets/Widgets.cpp
+    src/Widgets/VirtualList.cpp
+    src/Widgets/Docking.cpp
+    src/Widgets/Graphs.cpp
+    src/Widgets/Popup.cpp
     src/Config/UIConfig.cpp
 )
 add_library(SpriteUi::SpriteUI ALIAS SpriteUI)
@@ -108,4 +113,21 @@ if(SPRITEUI_DXC_EXECUTABLE)
     )
 else()
     message(STATUS "DXC not found: HLSL compilation target is skipped")
+endif()
+
+# Padrao de projeto: todo header publico deve compilar sozinho (self-contained).
+# Uso: cmake -DSPRITEUI_CHECK_HEADERS=ON ... && cmake --build . --target spriteui_check_headers
+option(SPRITEUI_CHECK_HEADERS "Compile each public header as its own translation unit" OFF)
+if(SPRITEUI_CHECK_HEADERS)
+    file(GLOB_RECURSE SPRITEUI_PUBLIC_HEADERS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/include"
+         "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp")
+    set(SPRITEUI_HEADER_CHECK_SOURCES "")
+    foreach(header IN LISTS SPRITEUI_PUBLIC_HEADERS)
+        string(MAKE_C_IDENTIFIER "${header}" header_id)
+        set(tu "${CMAKE_CURRENT_BINARY_DIR}/header_checks/${header_id}.cpp")
+        file(WRITE "${tu}" "#include \"${header}\"\n")
+        list(APPEND SPRITEUI_HEADER_CHECK_SOURCES "${tu}")
+    endforeach()
+    add_library(spriteui_check_headers OBJECT ${SPRITEUI_HEADER_CHECK_SOURCES})
+    target_link_libraries(spriteui_check_headers PRIVATE SpriteUi::SpriteUI)
 endif()

@@ -12,8 +12,10 @@ VirtualListRange UIVirtualList::ComputeVisibleRange(float scrollOffsetY, float v
     const float firstFloat = std::floor(scrollY / itemHeight_);
     const float lastFloat = std::ceil((scrollY + viewportHeight) / itemHeight_);
 
-    std::size_t rawFirst = static_cast<std::size_t>(std::max(0.0f, firstFloat));
-    std::size_t rawLast = static_cast<std::size_t>(std::max(0.0f, lastFloat));
+    // Limita ao ultimo item antes do cast: floats gigantes tornariam a conversao indefinida.
+    const float maxIndex = static_cast<float>(totalItems_ - 1);
+    const std::size_t rawFirst = static_cast<std::size_t>(std::clamp(firstFloat, 0.0f, maxIndex));
+    const std::size_t rawLast = static_cast<std::size_t>(std::clamp(lastFloat, 0.0f, maxIndex));
 
     // Apply overscan
     std::size_t first = (rawFirst > overscan_) ? (rawFirst - overscan_) : 0;
@@ -39,3 +41,4 @@ bool UIVirtualList::IsItemVisible(std::size_t index, float scrollOffsetY, float 
 }
 
 } // namespace ToolEngine::SpriteUi::Widgets
+

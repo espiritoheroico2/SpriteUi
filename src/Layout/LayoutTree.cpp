@@ -126,7 +126,7 @@ void LayoutTree::Layout(Rect viewport, LayoutStats* stats) {
         if (!element || !element->visible) continue;
 
         LayoutNode node = Build(root);
-        engine.Measure(node, viewport.size, stats);
+        (void)engine.Measure(node, viewport.size, stats);
         engine.Arrange(node, viewport, stats);
         Commit(root, node);
     }

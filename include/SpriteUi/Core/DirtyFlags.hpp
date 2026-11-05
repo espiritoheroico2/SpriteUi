@@ -16,6 +16,19 @@ enum class UIDirtyBits : std::uint32_t {
     Blur         = 1u << 7
 };
 
+// Nomes normativos do documento V4.2 (secao 6): DirtyNone, DirtyMeasure, ...
+// O tipo e um enum class para evitar conversoes implicitas; estas constantes
+// preservam o vocabulario do documento sem poluir o namespace com enumeradores soltos.
+inline constexpr UIDirtyBits DirtyNone       = UIDirtyBits::None;
+inline constexpr UIDirtyBits DirtyMeasure    = UIDirtyBits::Measure;
+inline constexpr UIDirtyBits DirtyArrange    = UIDirtyBits::Arrange;
+inline constexpr UIDirtyBits DirtyTransform  = UIDirtyBits::Transform;
+inline constexpr UIDirtyBits DirtyHitTargets = UIDirtyBits::HitTargets;
+inline constexpr UIDirtyBits DirtyTextShape  = UIDirtyBits::TextShape;
+inline constexpr UIDirtyBits DirtyTextAtlas  = UIDirtyBits::TextAtlas;
+inline constexpr UIDirtyBits DirtyDrawData   = UIDirtyBits::DrawData;
+inline constexpr UIDirtyBits DirtyBlur       = UIDirtyBits::Blur;
+
 [[nodiscard]] constexpr UIDirtyBits operator|(UIDirtyBits a, UIDirtyBits b) noexcept {
     return static_cast<UIDirtyBits>(static_cast<std::uint32_t>(a) |
                                     static_cast<std::uint32_t>(b));

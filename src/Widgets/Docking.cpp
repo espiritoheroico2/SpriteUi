@@ -1,6 +1,8 @@
 #include "SpriteUi/Widgets/Docking.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <cstddef>
 
 namespace ToolEngine::SpriteUi::Widgets {
 
@@ -12,8 +14,12 @@ bool UITabGroupComponent::AddTab(std::string title, UIHandle contentHandle, bool
 
 bool UITabGroupComponent::RemoveTab(std::size_t index) {
     if (index >= tabs_.size()) return false;
-    tabs_.erase(tabs_.begin() + index);
-    if (activeTabIndex_ >= tabs_.size() && !tabs_.empty()) {
+    tabs_.erase(tabs_.begin() + static_cast<std::ptrdiff_t>(index));
+    if (tabs_.empty()) {
+        activeTabIndex_ = 0;
+    } else if (index < activeTabIndex_) {
+        --activeTabIndex_; // Mantem a mesma aba ativa apos remover uma anterior.
+    } else if (activeTabIndex_ >= tabs_.size()) {
         activeTabIndex_ = tabs_.size() - 1;
     }
     return true;
@@ -33,13 +39,20 @@ UIHandle UITabGroupComponent::GetActiveContent() const noexcept {
 }
 
 bool UIDockNode::Split(DockSlot slot, float ratio, UIHandle newContent) {
-    if (slot == DockSlot::None || !newContent.IsValid()) {
+    if (slot == DockSlot::None || !newContent.IsValid() || isSplit) {
         return false;
     }
+    if (!std::isfinite(ratio)) return false;
 
     if (slot == DockSlot::Center) {
-        content = newContent;
-        return true;
+        // Nunca descarta o conteudo existente: agrupa em abas.
+        if (!content.IsValid() && tabs.TabCount() == 0) {
+            content = newContent;
+            return true;
+        }
+        if (tabs.TabCount() == 0) (void)tabs.AddTab("", content);
+        (void)tabs.AddTab("", newContent);
+        return tabs.SelectTab(tabs.TabCount() - 1);
     }
 
     const float clampedRatio = std::clamp(ratio, 0.05f, 0.95f);
@@ -50,18 +63,24 @@ bool UIDockNode::Split(DockSlot slot, float ratio, UIHandle newContent) {
     isSplit = true;
 
     firstChild = std::make_unique<UIDockNode>(originalContent);
+    firstChild->tabs = std::move(tabs); // As abas acompanham o conteudo original.
+    tabs = UITabGroupComponent{};
     secondChild = std::make_unique<UIDockNode>(newContent);
 
     if (slot == DockSlot::Left) {
         splitDirection = LayoutDirection::Row;
+        splitRatio = clampedRatio;
         std::swap(firstChild, secondChild);
     } else if (slot == DockSlot::Right) {
         splitDirection = LayoutDirection::Row;
+        splitRatio = 1.0f - clampedRatio;
     } else if (slot == DockSlot::Top) {
         splitDirection = LayoutDirection::Column;
+        splitRatio = clampedRatio;
         std::swap(firstChild, secondChild);
     } else if (slot == DockSlot::Bottom) {
         splitDirection = LayoutDirection::Column;
+        splitRatio = 1.0f - clampedRatio;
     }
 
     return true;

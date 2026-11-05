@@ -32,3 +32,4 @@ PopupInputResult UIPopupManager::HandlePointerDown(Vec2 pointerPosLogical) noexc
 }
 
 } // namespace ToolEngine::SpriteUi::Widgets
+

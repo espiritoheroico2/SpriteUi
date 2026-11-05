@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 
 namespace ToolEngine::SpriteUi::Widgets {
 
@@ -31,6 +30,13 @@ struct UISliderComponent {
         }
         value = next;
         return true;
+    }
+
+    // Valor normalizado [0,1] apenas para desenho; o valor armazenado permanece no dominio real.
+    [[nodiscard]] float Normalized() const noexcept {
+        const float range = maxValue - minValue;
+        if (!IsFinite(value) || !IsFinite(range) || range <= 1.0e-12f) return 0.0f;
+        return Clamp01((value - minValue) / range);
     }
 
     [[nodiscard]] bool SetFromPointer(float localX, float viewportWidth) noexcept {
@@ -67,6 +73,12 @@ struct UIScrollViewComponent {
         ClampScroll();
     }
 };
+
+// Forma livre normativa (documento V4.2, secao 3.1): desconta a viewport do conteudo.
+inline void ClampScroll(UIScrollViewComponent& scroll, Vec2 viewportSize) noexcept {
+    scroll.viewportSize = viewportSize;
+    scroll.ClampScroll();
+}
 
 struct UIButtonState {
     bool hovered = false;

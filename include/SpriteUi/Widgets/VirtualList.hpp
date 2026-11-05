@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 
 namespace ToolEngine::SpriteUi::Widgets {
@@ -50,3 +51,4 @@ private:
 };
 
 } // namespace ToolEngine::SpriteUi::Widgets
+

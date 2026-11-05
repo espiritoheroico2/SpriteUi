@@ -14,3 +14,7 @@
 *.dll
 *.so
 *.dylib
+
+/.cache/
+compile_commands.json
+/Testing/

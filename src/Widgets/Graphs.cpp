@@ -93,3 +93,4 @@ Rect UILinePlot::ComputeBounds() const noexcept {
 }
 
 } // namespace ToolEngine::SpriteUi::Widgets
+

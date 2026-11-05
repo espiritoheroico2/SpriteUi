@@ -14,12 +14,15 @@ cbuffer SpriteUIGlobals : register(b0)
 {
     row_major float4x4 ViewProjection;
     uint BaseInstance;
-    uint3 _GlobalPadding;
+    float MsdfPxRange;   // Amplitude do MSDF em pixels do atlas (FontMetrics::pxRange).
+    uint2 _GlobalPadding;
 };
 
 StructuredBuffer<SpriteInstanceGPU> SpriteInstances : register(t0);
 Texture2DArray SpriteTextures : register(t1);
-StructuredBuffer<float4> ClipRects : register(t2); // minX,minY,maxX,maxY in framebuffer pixels
+// minX,minY,maxX,maxY. O backend deve converter de pixels logicos (ClipRectGPU) para pixels
+// do framebuffer (multiplicando pelo fator de DPI) ao preencher este buffer.
+StructuredBuffer<float4> ClipRects : register(t2);
 SamplerState SpriteSampler : register(s0);
 
 struct VSOutput
@@ -69,7 +72,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
             SpriteSampler, float3(input.uv, input.resourceIds.x)).rgb;
         const float sd = Median(msd.r, msd.g, msd.b) - 0.5;
         // Screen pixel distance derived from UV derivatives
-        const float2 unitRange = float2(4.0, 4.0) / max(fwidth(input.uv), float2(1e-5, 1e-5));
+        // pxRange vem do cbuffer (V4.2 sec. 4): amplitude em px / derivada real do UV.
+        const float2 unitRange = float2(MsdfPxRange, MsdfPxRange) / max(fwidth(input.uv), float2(1e-5, 1e-5));
         const float screenPxDistance = sd * 0.5 * (unitRange.x + unitRange.y);
         const float textAlpha = clamp(screenPxDistance + 0.5, 0.0, 1.0);
         color *= textAlpha;

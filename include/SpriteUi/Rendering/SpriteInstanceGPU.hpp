@@ -34,8 +34,8 @@ struct alignas(16) UIMaterialGPU {
 static_assert(sizeof(UIMaterialGPU) == 48);
 
 [[nodiscard]] inline Vec4 PremultiplyLinear(Vec4 straightLinear) noexcept {
-    const float alpha = Clamp01(straightLinear.w);
     if (!IsFinite(straightLinear)) return {};
+    const float alpha = Clamp01(straightLinear.w);
     return {
         straightLinear.x * alpha,
         straightLinear.y * alpha,

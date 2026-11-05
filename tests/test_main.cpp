@@ -328,6 +328,103 @@ void TestSemanticNavigationRouter() {
     CHECK(lost.front().type == UISemanticEventType::FocusChanged);
 }
 
+
+void TestReviewRegressions() {
+    using namespace ToolEngine::SpriteUi::Widgets;
+    using namespace ToolEngine::SpriteUi::Rendering;
+    using namespace ToolEngine::SpriteUi::Text;
+    using namespace ToolEngine::SpriteUi::Binding;
+    using namespace ToolEngine::SpriteUi::Config;
+
+    // Percentuais resolvem contra o pai, nao contra o viewport raiz.
+    {
+        LayoutNode root; root.style.width = {SizeMode::Fixed, 400}; root.style.height = {SizeMode::Fixed, 100};
+        LayoutNode mid; mid.style.width = {SizeMode::Fixed, 200}; mid.style.height = {SizeMode::Fixed, 100};
+        LayoutNode leaf; leaf.style.width = {SizeMode::Percent, 0.5f}; leaf.style.height = {SizeMode::Fixed, 10};
+        mid.children = {leaf}; root.children = {mid};
+        LayoutEngine engine;
+        (void)engine.Measure(root, {400, 100});
+        engine.Arrange(root, {{0, 0}, {400, 100}});
+        CHECK(Near(root.children[0].children[0].rect.size.x, 100.0f));
+    }
+    // Stretch nao sobrescreve tamanho transversal Fixed; max/min sao respeitados no grow.
+    {
+        LayoutNode root; root.style.width = {SizeMode::Fixed, 300}; root.style.height = {SizeMode::Fixed, 100};
+        LayoutNode a; a.style.width = {SizeMode::Flex, 0}; a.style.height = {SizeMode::Fixed, 30}; a.style.grow = 1; a.style.maxSize.x = 50;
+        LayoutNode b; b.style.width = {SizeMode::Flex, 0}; b.style.height = {SizeMode::Auto, 0}; b.style.grow = 1;
+        root.children = {a, b};
+        LayoutEngine engine;
+        (void)engine.Measure(root, {300, 100});
+        engine.Arrange(root, {{0, 0}, {300, 100}});
+        CHECK(Near(root.children[0].rect.size.y, 30.0f));
+        CHECK(Near(root.children[0].rect.size.x, 50.0f));
+        CHECK(Near(root.children[1].rect.size.x, 250.0f));
+        CHECK(Near(root.children[1].rect.size.y, 100.0f));
+    }
+    // Texto gerado precisa sobreviver ao RenderExtractor quando ha handle dono.
+    {
+        TextLayoutResult layout;
+        GlyphQuad quad; quad.bounds = {{0, 0}, {8, 8}};
+        layout.quads.push_back(quad);
+        UILayoutRect rect{{0, 0}, {100, 20}, true, false};
+        const auto items = GenerateTextRenderItems(layout, rect, {1, 1, 1, 1}, 1, NoClipIndex, 0.0f, 0, UIHandle{7, 1});
+        CHECK(RenderExtractor{}.Build(1, items).instances.size() == 1);
+    }
+    // Bindings disparam na primeira leitura, mesmo com valores "sentinela" antigos.
+    {
+        UIFloatBinding f; CHECK(f.Update(-1.0e9f));
+        UIIntBinding i; CHECK(i.Update(-999999)); CHECK(!i.Update(-999999));
+    }
+    // Aba ativa preservada ao remover aba anterior; Split em no ja dividido e recusado.
+    {
+        UITabGroupComponent tabs;
+        (void)tabs.AddTab("A", {1, 1}); (void)tabs.AddTab("B", {2, 1}); (void)tabs.AddTab("C", {3, 1});
+        CHECK(tabs.SelectTab(2)); CHECK(tabs.RemoveTab(0));
+        CHECK(tabs.GetActiveContent() == (UIHandle{3, 1}));
+        UIDockNode node({10, 1});
+        CHECK(node.Split(DockSlot::Left, 0.3f, {11, 1}));
+        CHECK(!node.Split(DockSlot::Right, 0.3f, {12, 1}));
+        UIDockNode leaf({20, 1});
+        CHECK(leaf.Split(DockSlot::Center, 0.5f, {21, 1}));
+        CHECK(leaf.content == (UIHandle{20, 1}) && leaf.tabs.TabCount() == 2);
+        CHECK(leaf.VisibleContent() == (UIHandle{21, 1}));
+    }
+    // VirtualList: scroll gigantesco nao causa overflow de conversao.
+    {
+        UIVirtualList list(1000, 20.0f);
+        const auto range = list.ComputeVisibleRange(1.0e30f, 200.0f);
+        CHECK(range.lastIndex == 999 && range.firstIndex <= range.lastIndex);
+    }
+    // Navegacao: primeiro Activate so adquire foco.
+    {
+        using namespace ToolEngine::SpriteUi::Input;
+        const UIFocusCandidate c[] = {{{1, 1}, {{0, 0}, {10, 10}}, true, true, true, 0}};
+        UINavigationRouter router;
+        const auto events = router.Process(UINavigationCommand::Activate, c);
+        CHECK(events.size() == 1 && events[0].type == UISemanticEventType::FocusChanged);
+    }
+    // Config: chaves desconhecidas de qualquer tipo, escapes e lixo final.
+    {
+        UISettingsConfig out;
+        const std::string ok = R"({"extra":{"a":[1,2,{"b":null}]},"schemaVersion":1,"windows":[{"name":"a\"b","zzz":3.5}]})";
+        CHECK(UIConfigManager::ValidateAndStage(ok, out));
+        CHECK(out.windows.size() == 1 && out.windows[0].name == "a\"b");
+        CHECK(UIConfigManager::ValidateAndStage(UIConfigManager::Serialize(out), out));
+        CHECK(!UIConfigManager::ValidateAndStage(R"({"schemaVersion":1} xx)", out));
+        CHECK(!UIConfigManager::ValidateAndStage(R"({"schemaVersion":1)", out));
+        CHECK(!UIConfigManager::ValidateAndStage(R"({"schemaVersion":1.5})", out));
+    }
+    // Slider normalizado e ClampScroll livre (V4.2 sec. 3.1).
+    {
+        UISliderComponent slider; slider.minValue = 10; slider.maxValue = 20; slider.value = 15;
+        CHECK(Near(slider.Normalized(), 0.5f));
+        UIScrollViewComponent scroll; scroll.contentSize = {100, 500}; scroll.scrollOffset = {0, 9999};
+        ClampScroll(scroll, {100, 200});
+        CHECK(Near(scroll.scrollOffset.y, 300.0f));
+        CHECK((DirtyMeasure | DirtyArrange) != DirtyNone);
+    }
+}
+
 void TestCanvasConfig() {
     using namespace ToolEngine::SpriteUi::Rendering;
     UICanvasRenderConfig config;
@@ -522,7 +619,7 @@ static void TestFlexLayout() {
     LayoutNode a; a.style.width={SizeMode::Fixed,100}; a.style.height={SizeMode::Fixed,40};
     LayoutNode b; b.style.width={SizeMode::Flex,0}; b.style.height={SizeMode::Fixed,50}; b.style.grow=1;
     root.children={a,b}; LayoutEngine engine; LayoutStats stats;
-    engine.Measure(root,{300,100},&stats); engine.Arrange(root,{{0,0},{300,100}},&stats);
+    (void)engine.Measure(root,{300,100},&stats); engine.Arrange(root,{{0,0},{300,100}},&stats);
     CHECK(root.children[0].rect.size.x==100.0f);
     CHECK(root.children[1].rect.size.x==190.0f);
     CHECK(root.children[1].rect.position.x==110.0f);
@@ -873,8 +970,169 @@ static void TestUIConfigManager() {
     CHECK(Near(ReadFiniteFloat(100.0f, 1.0f, 0.0f, 10.0f), 10.0f));
 }
 
+static void TestFlexJustifyContent() {
+    using namespace ToolEngine::SpriteUi;
+    LayoutEngine engine;
+
+    // Test Center justification
+    LayoutNode root;
+    root.style.direction = LayoutDirection::Row;
+    root.style.width = {SizeMode::Fixed, 300.0f};
+    root.style.height = {SizeMode::Fixed, 100.0f};
+    root.style.justifyContent = JustifyContent::Center;
+
+    LayoutNode a;
+    a.style.width = {SizeMode::Fixed, 50.0f};
+    a.style.height = {SizeMode::Fixed, 50.0f};
+
+    LayoutNode b;
+    b.style.width = {SizeMode::Fixed, 50.0f};
+    b.style.height = {SizeMode::Fixed, 50.0f};
+
+    root.children = {a, b};
+    (void)engine.Measure(root, {300.0f, 100.0f});
+    engine.Arrange(root, {{0.0f, 0.0f}, {300.0f, 100.0f}});
+
+    // Free space = 300 - 100 = 200. Center offset = 100.
+    CHECK(Near(root.children[0].rect.position.x, 100.0f));
+    CHECK(Near(root.children[1].rect.position.x, 150.0f));
+
+    // Test SpaceBetween justification
+    root.style.justifyContent = JustifyContent::SpaceBetween;
+    engine.Arrange(root, {{0.0f, 0.0f}, {300.0f, 100.0f}});
+    CHECK(Near(root.children[0].rect.position.x, 0.0f));
+    CHECK(Near(root.children[1].rect.position.x, 250.0f));
+}
+
+static void TestVirtualList() {
+    using namespace ToolEngine::SpriteUi::Widgets;
+
+    UIVirtualList list(1000, 30.0f, 2);
+    CHECK(list.GetTotalItems() == 1000);
+    CHECK(Near(list.GetItemHeight(), 30.0f));
+    CHECK(Near(list.GetTotalContentHeight(), 30000.0f));
+    CHECK(Near(list.GetItemOffsetY(10), 300.0f));
+
+    // Viewport height 300 (10 items visible), scroll offset at 600 (item 20)
+    const auto range = list.ComputeVisibleRange(600.0f, 300.0f);
+    CHECK(range.firstIndex == 18);
+    CHECK(range.lastIndex == 32);
+    CHECK(range.count == 15);
+
+    CHECK(list.IsItemVisible(20, 600.0f, 300.0f));
+    CHECK(list.IsItemVisible(18, 600.0f, 300.0f));
+    CHECK(!list.IsItemVisible(10, 600.0f, 300.0f));
+    CHECK(!list.IsItemVisible(50, 600.0f, 300.0f));
+}
+
+static void TestTabsAndDocking() {
+    using namespace ToolEngine::SpriteUi::Widgets;
+
+    // Tabs
+    UITabGroupComponent tabGroup;
+    CHECK(tabGroup.AddTab("Scene", {10, 1}));
+    CHECK(tabGroup.AddTab("Game", {20, 1}));
+    CHECK(tabGroup.AddTab("Console", {30, 1}));
+    CHECK(tabGroup.TabCount() == 3);
+    CHECK(tabGroup.GetActiveContent() == (UIHandle{10, 1}));
+
+    CHECK(tabGroup.SelectTab(1));
+    CHECK(tabGroup.GetActiveContent() == (UIHandle{20, 1}));
+    CHECK(tabGroup.RemoveTab(0));
+    CHECK(tabGroup.TabCount() == 2);
+
+    // Docking
+    UIDockNode dockRoot({100, 1});
+    CHECK(dockRoot.Split(DockSlot::Right, 0.4f, {101, 1}));
+    CHECK(dockRoot.isSplit);
+    CHECK(dockRoot.firstChild != nullptr);
+    CHECK(dockRoot.secondChild != nullptr);
+
+    dockRoot.Layout({{0, 0}, {1000, 600}});
+    CHECK(Near(dockRoot.firstChild->bounds.size.x, 600.0f));
+    CHECK(Near(dockRoot.secondChild->bounds.size.x, 400.0f));
+    CHECK(Near(dockRoot.secondChild->bounds.position.x, 600.0f));
+}
+
+static void TestValueBinding() {
+    using namespace ToolEngine::SpriteUi::Binding;
+
+    UIFloatBinding health;
+    CHECK(health.Update(100.0f));
+    CHECK(!health.Update(100.0001f)); // Below threshold 0.001f
+    CHECK(health.Update(95.0f));      // Above threshold
+
+    UIIntBinding score;
+    CHECK(score.Update(10));
+    CHECK(!score.Update(10));
+    CHECK(score.Update(20));
+
+    UIBoolBinding paused;
+    CHECK(paused.Update(true));
+    CHECK(!paused.Update(true));
+    CHECK(paused.Update(false));
+
+    UIStringBinding playerName;
+    CHECK(playerName.Update("Hero"));
+    CHECK(!playerName.Update("Hero"));
+    CHECK(playerName.Update("Champion"));
+}
+
+static void TestGraphsAndOscilloscope() {
+    using namespace ToolEngine::SpriteUi::Widgets;
+
+    UIOscilloscopeGraph osc;
+    for (int i = 0; i < 300; ++i) {
+        osc.AddSample(static_cast<float>(i));
+    }
+    CHECK(osc.sampleCount == UIOscilloscopeGraph::HistoryCapacity);
+    CHECK(Near(osc.GetLatestSample(), 299.0f));
+
+    float ordered[4];
+    osc.GetOrderedSamples(ordered);
+    // Oldest sample in a full 256 ring buffer after 300 insertions is 300 - 256 = 44
+    CHECK(Near(ordered[0], 44.0f));
+    CHECK(Near(ordered[1], 45.0f));
+
+    float normalized[2];
+    osc.GetNormalizedSamples(normalized, 0.0f, 300.0f);
+    CHECK(normalized[0] >= 0.0f && normalized[0] <= 1.0f);
+
+    UILinePlot plot;
+    plot.AddPoint({10.0f, 20.0f});
+    plot.AddPoint({50.0f, 100.0f});
+    const auto bounds = plot.ComputeBounds();
+    CHECK(Near(bounds.position.x, 10.0f));
+    CHECK(Near(bounds.position.y, 20.0f));
+    CHECK(Near(bounds.size.x, 40.0f));
+    CHECK(Near(bounds.size.y, 80.0f));
+}
+
+static void TestPopupManager() {
+    using namespace ToolEngine::SpriteUi::Widgets;
+
+    UIPopupManager popupMgr;
+    CHECK(!popupMgr.IsPopupOpen());
+
+    UIHandle popupHandle{555, 1};
+    popupMgr.OpenPopup(popupHandle, {{100, 100}, {150, 200}}, true);
+    CHECK(popupMgr.IsPopupOpen());
+    CHECK(popupMgr.GetActivePopup() == popupHandle);
+
+    // Inside click
+    auto resInside = popupMgr.HandlePointerDown({120, 150});
+    CHECK(resInside == PopupInputResult::InsidePopup);
+    CHECK(popupMgr.IsPopupOpen());
+
+    // Outside click
+    auto resOutside = popupMgr.HandlePointerDown({50, 50});
+    CHECK(resOutside == PopupInputResult::ClosedDueToOutsideClick);
+    CHECK(!popupMgr.IsPopupOpen());
+}
+
 int main() {
     TestFlexLayout();
+    TestFlexJustifyContent();
     TestClipHierarchyAndInputClip();
     TestLayoutTreeAndAlignment();
     TestAnchorsAndTransforms();
@@ -885,6 +1143,7 @@ int main() {
     TestHitTestTransformAndMaxFrameId();
     TestSpatialNavigationAndDirtyFlags();
     TestSemanticNavigationRouter();
+    TestReviewRegressions();
     TestEventBubblingAndHoverConsumption();
     TestCanvasConfig();
     TestWidgets();
@@ -895,6 +1154,11 @@ int main() {
     TestWidgetsAndWindowInteraction();
     TestLayoutSceneBridge();
     TestUIConfigManager();
+    TestVirtualList();
+    TestTabsAndDocking();
+    TestValueBinding();
+    TestGraphsAndOscilloscope();
+    TestPopupManager();
 
     if (failures != 0) {
         std::cerr << failures << " failure(s) in " << testsRun << " checks.\n";

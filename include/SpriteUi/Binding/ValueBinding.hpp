@@ -13,13 +13,15 @@ namespace ToolEngine::SpriteUi::Binding {
 // Only triggers visual layout or property updates when value exceeds epsilon delta.
 struct UIFloatBinding {
     UIHandle targetEntity{};
-    float lastKnownValue = -1.0e9f;
+    float lastKnownValue = 0.0f;
     float threshold = 0.001f;
+    bool initialized = false; // A primeira atualizacao valida sempre dispara.
 
     [[nodiscard]] bool Update(float currentValue) noexcept {
         if (!IsFinite(currentValue)) return false;
-        if (std::abs(currentValue - lastKnownValue) > threshold) {
+        if (!initialized || std::abs(currentValue - lastKnownValue) > threshold) {
             lastKnownValue = currentValue;
+            initialized = true;
             return true;
         }
         return false;
@@ -28,11 +30,13 @@ struct UIFloatBinding {
 
 struct UIIntBinding {
     UIHandle targetEntity{};
-    int lastKnownValue = -999999;
+    int lastKnownValue = 0;
+    bool initialized = false;
 
     [[nodiscard]] bool Update(int currentValue) noexcept {
-        if (currentValue != lastKnownValue) {
+        if (!initialized || currentValue != lastKnownValue) {
             lastKnownValue = currentValue;
+            initialized = true;
             return true;
         }
         return false;
@@ -57,10 +61,12 @@ struct UIBoolBinding {
 struct UIStringBinding {
     UIHandle targetEntity{};
     std::string lastKnownValue;
+    bool initialized = false;
 
     [[nodiscard]] bool Update(std::string_view currentValue) {
-        if (currentValue != lastKnownValue) {
+        if (!initialized || currentValue != lastKnownValue) {
             lastKnownValue = currentValue;
+            initialized = true;
             return true;
         }
         return false;
@@ -68,3 +74,4 @@ struct UIStringBinding {
 };
 
 } // namespace ToolEngine::SpriteUi::Binding
+

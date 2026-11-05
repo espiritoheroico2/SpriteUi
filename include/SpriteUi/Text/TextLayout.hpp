@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SpriteUi/Core/Handle.hpp"
 #include "SpriteUi/Core/Math.hpp"
 #include "SpriteUi/Core/Transform2D.hpp"
 #include "SpriteUi/Rendering/DrawList.hpp"
@@ -71,7 +72,8 @@ struct TextLayoutResult {
     std::uint32_t atlasTextureSlice,
     std::uint32_t clipIndex = Rendering::NoClipIndex,
     float zOrder = 0.0f,
-    std::uint64_t basePaintOrder = 0);
+    std::uint64_t basePaintOrder = 0,
+    UIHandle owner = {}); // Handle valido e obrigatorio para o RenderExtractor aceitar os itens.
 
 } // namespace ToolEngine::SpriteUi::Text
 

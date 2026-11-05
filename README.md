@@ -1,6 +1,6 @@
 # SpriteUI
 
-**Versão:** 0.3.0 — Layout Tree + Clip Hierarchy C++20, baseado na especificação V4.2.
+**Versão:** 0.5.1 — núcleo C++20 (layout, input, widgets, docking, texto, config), baseado na especificação V4.2. Revisão e conformidade: `docs/REVIEW_V4_2.md`. Convenções: `docs/CODING_STANDARDS.md`.
 
 SpriteUI é o início executável de uma biblioteca de interface 2D orientada a dados. O núcleo matemático, input, widgets lógicos, animação e extração de comandos são independentes de ECS e de API gráfica, para que Flecs e Diligent possam ser integrados por adaptadores sem contaminar os contratos públicos.
 
@@ -33,18 +33,16 @@ SpriteUI é o início executável de uma biblioteca de interface 2D orientada a 
 
 | Módulo | Estado |
 |---|---|
-| Flexbox completo, distribuição iterativa de grow/shrink e min/max freeze | Parcial: subset Measure/Arrange implementado |
-| Árvore de UI, Canvas e virtualização | Parcial: árvore de layout e clipping hierárquico básico implementados |
+| Flexbox: wrap, align-self distinto de align-items, baseline | Pendente (grow/shrink com freeze de min/max e justify-content implementados) |
 | Flecs ECS adapter | Pendente |
 | Diligent Engine backend, buffers reais e fences | Pendente |
 | SDL3/GLFW, janela, clipboard, IME e input multi-pointer | Pendente |
-| Widgets visuais completos, docking, tabs e drag & drop | Pendente |
-| HarfBuzz, FreeType, grapheme clusters, MSDF atlas e edição Unicode | Pendente |
+| Widgets visuais (desenho), drag & drop de docking | Pendente (lógica de janelas, abas e dock tree implementada) |
+| HarfBuzz, FreeType, grapheme clusters, MSDF atlas | Pendente (layout geométrico de glifos já shaped implementado; `TextWrap::Word` ainda quebra por glifo) |
 | ToonMotion timeline/keyframes e integração ECS | Pendente |
-| Persistência JSON transacional | Pendente |
 | KTX2/Basis, streaming e eviction por fences | Pendente |
 | Light Prism ClusterLit, Bloom, Acrylic Blur e sombras | Pendente |
-| Partículas, gráficos e nodes de editor | Pendente |
+| Partículas e nodes de editor | Pendente |
 | QuickJS sandbox e FFI | Pendente |
 
 O estado completo e a correspondência com o documento V4.2 estão em `docs/IMPLEMENTATION_STATUS.md` e `docs/V4_2_IMPLEMENTATION_MAP.md`.
