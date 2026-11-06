@@ -1,5 +1,8 @@
 #include "SpriteUi/SpriteUi.hpp"
 
+#include "TestHarness.hpp"
+#include "TestSuites.hpp"
+
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -11,22 +14,9 @@ using namespace ToolEngine::SpriteUi;
 
 namespace {
 
-int failures = 0;
-int testsRun = 0;
-
-void Check(bool condition, const char* expression, const char* testName) {
-    ++testsRun;
-    if (!condition) {
-        ++failures;
-        std::cerr << "[FAIL] " << testName << ": " << expression << '\n';
-    }
-}
-
-#define CHECK(expr) Check((expr), #expr, __func__)
-
-bool Near(float a, float b, float epsilon = 1.0e-4f) {
-    return std::abs(a - b) <= epsilon;
-}
+using SpriteUiTests::failures;
+using SpriteUiTests::Near;
+using SpriteUiTests::testsRun;
 
 void TestAnchorsAndTransforms() {
     UIRectTransform transform;
@@ -1159,6 +1149,8 @@ int main() {
     TestValueBinding();
     TestGraphsAndOscilloscope();
     TestPopupManager();
+
+    SpriteUiTests::RunGraphSamplingTests();
 
     if (failures != 0) {
         std::cerr << failures << " failure(s) in " << testsRun << " checks.\n";

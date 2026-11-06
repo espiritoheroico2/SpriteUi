@@ -6,13 +6,21 @@
 
 namespace ToolEngine::SpriteUi::Widgets {
 
+std::size_t UIOscilloscopeGraph::SafeCount() const noexcept {
+    return std::min(sampleCount, HistoryCapacity);
+}
+
+std::size_t UIOscilloscopeGraph::SafeHead() const noexcept {
+    return headIndex % HistoryCapacity;
+}
+
 void UIOscilloscopeGraph::AddSample(float value) noexcept {
     if (!IsFinite(value)) value = 0.0f;
-    valueHistory[headIndex] = value;
-    headIndex = (headIndex + 1) % HistoryCapacity;
-    if (sampleCount < HistoryCapacity) {
-        ++sampleCount;
-    }
+    // The fields are public: never trust them for indexing.
+    const std::size_t head = SafeHead();
+    valueHistory[head] = value;
+    headIndex = (head + 1) % HistoryCapacity;
+    sampleCount = std::min(SafeCount() + 1, HistoryCapacity);
 }
 
 void UIOscilloscopeGraph::Clear() noexcept {
@@ -24,35 +32,53 @@ void UIOscilloscopeGraph::Clear() noexcept {
 }
 
 float UIOscilloscopeGraph::GetLatestSample() const noexcept {
-    if (sampleCount == 0) return 0.0f;
-    const std::size_t latestIdx = (headIndex == 0) ? (HistoryCapacity - 1) : (headIndex - 1);
+    if (SafeCount() == 0) return 0.0f;
+    const std::size_t head = SafeHead();
+    const std::size_t latestIdx = (head == 0) ? (HistoryCapacity - 1) : (head - 1);
     return valueHistory[latestIdx];
 }
 
-void UIOscilloscopeGraph::GetOrderedSamples(std::span<float> outBuffer) const noexcept {
-    if (outBuffer.empty() || sampleCount == 0) return;
-
-    const std::size_t count = std::min(outBuffer.size(), sampleCount);
-    const std::size_t start = (sampleCount < HistoryCapacity)
-        ? 0
-        : headIndex;
-
+void UIOscilloscopeGraph::CopyChronological(
+    std::span<float> outBuffer, std::size_t skip, std::size_t count) const noexcept
+{
+    const std::size_t stored = SafeCount();
+    const std::size_t oldest = (stored < HistoryCapacity) ? 0 : SafeHead();
     for (std::size_t i = 0; i < count; ++i) {
-        const std::size_t ringIdx = (start + i) % HistoryCapacity;
-        outBuffer[i] = valueHistory[ringIdx];
+        outBuffer[i] = valueHistory[(oldest + skip + i) % HistoryCapacity];
     }
 }
 
-void UIOscilloscopeGraph::GetNormalizedSamples(std::span<float> outBuffer, float minVal, float maxVal) const noexcept {
-    if (outBuffer.empty() || sampleCount == 0) return;
+void UIOscilloscopeGraph::GetOrderedSamples(std::span<float> outBuffer) const noexcept {
+    const std::size_t stored = SafeCount();
+    if (outBuffer.empty() || stored == 0) return;
+    CopyChronological(outBuffer, 0, std::min(outBuffer.size(), stored));
+}
 
-    GetOrderedSamples(outBuffer);
-    const std::size_t count = std::min(outBuffer.size(), sampleCount);
+std::size_t UIOscilloscopeGraph::GetLatestSamples(std::span<float> outBuffer) const noexcept {
+    const std::size_t stored = SafeCount();
+    if (outBuffer.empty() || stored == 0) return 0;
+    const std::size_t count = std::min(outBuffer.size(), stored);
+    CopyChronological(outBuffer, stored - count, count);
+    return count;
+}
+
+void UIOscilloscopeGraph::GetNormalizedSamples(
+    std::span<float> outBuffer, float minVal, float maxVal, SampleWindow window) const noexcept
+{
+    const std::size_t stored = SafeCount();
+    if (outBuffer.empty() || stored == 0) return;
+
+    const std::size_t count = std::min(outBuffer.size(), stored);
+    if (window == SampleWindow::Latest) {
+        CopyChronological(outBuffer, stored - count, count);
+    } else {
+        CopyChronological(outBuffer, 0, count);
+    }
 
     float lo = minVal;
     float hi = maxVal;
 
-    if (lo >= hi) {
+    if (!IsFinite(lo) || !IsFinite(hi) || lo >= hi) {
         lo = std::numeric_limits<float>::infinity();
         hi = -std::numeric_limits<float>::infinity();
         for (std::size_t i = 0; i < count; ++i) {
