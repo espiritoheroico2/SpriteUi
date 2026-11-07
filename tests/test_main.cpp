@@ -1152,6 +1152,8 @@ int main() {
 
     SpriteUiTests::RunGraphSamplingTests();
     SpriteUiTests::RunTextBreakingTests();
+    SpriteUiTests::RunTextWrapLayoutTests();
+    SpriteUiTests::RunCaretAndHitTests();
 
     if (failures != 0) {
         std::cerr << failures << " failure(s) in " << testsRun << " checks.\n";
