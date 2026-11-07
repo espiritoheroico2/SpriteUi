@@ -1151,6 +1151,7 @@ int main() {
     TestPopupManager();
 
     SpriteUiTests::RunGraphSamplingTests();
+    SpriteUiTests::RunTextBreakingTests();
 
     if (failures != 0) {
         std::cerr << failures << " failure(s) in " << testsRun << " checks.\n";
