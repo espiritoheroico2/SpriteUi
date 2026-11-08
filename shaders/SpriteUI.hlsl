@@ -31,6 +31,8 @@ struct VSOutput
     float2 uv : TEXCOORD0;
     float4 tint : COLOR0;
     nointerpolation uint4 resourceIds : TEXCOORD1;
+    float2 local : TEXCOORD2;                 // Unit-quad coordinate (0..1), used by the SDF panel.
+    nointerpolation float3 panel : TEXCOORD3; // width, height (logical px), corner radius (px).
 };
 
 VSOutput VSMain(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID)
@@ -53,12 +55,26 @@ VSOutput VSMain(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID)
     output.uv = item.uvRect.xy + local * item.uvRect.zw;
     output.tint = item.tint;
     output.resourceIds = item.resourceIds;
+    output.local = local;
+    // The quad axes are the columns of the 2x2 part of the transform: their lengths are the size.
+    output.panel = float3(
+        length(float2(item.transformRow0.x, item.transformRow1.x)),
+        length(float2(item.transformRow0.y, item.transformRow1.y)),
+        item.transformRow1.w); // transformRow1.w (formerly reserved) carries the corner radius.
     return output;
 }
 
 float Median(float r, float g, float b)
 {
     return max(min(r, g), min(max(r, g), b));
+}
+
+// Analytic rounded rectangle. Mirrors Rendering::EvaluatePanelSdf (PanelSdf.hpp), radius clamp included.
+float EvaluatePanelSDF(float2 samplePos, float2 halfSize, float cornerRadius)
+{
+    const float r = clamp(cornerRadius, 0.0, min(halfSize.x, halfSize.y));
+    const float2 d = abs(samplePos) - halfSize + r;
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
 }
 
 float4 PSMain(VSOutput input) : SV_TARGET
@@ -83,6 +99,16 @@ float4 PSMain(VSOutput input) : SV_TARGET
         const float4 texel = SpriteTextures.Sample(
             SpriteSampler, float3(input.uv, input.resourceIds.x));
         color *= texel;
+    }
+
+    if ((flags & 0x4u) != 0u) // Flag_RoundedPanel
+    {
+        const float2 halfSize = input.panel.xy * 0.5;
+        const float2 samplePos = (input.local - 0.5) * input.panel.xy;
+        const float sd = EvaluatePanelSDF(samplePos, halfSize, input.panel.z);
+        // fwidth(sd) is the size of one device pixel in logical units: DPI independent 1px edge.
+        const float coverage = saturate(0.5 - sd / max(fwidth(sd), 1e-5));
+        color *= coverage;
     }
 
     const uint clipIndex = input.resourceIds.z;

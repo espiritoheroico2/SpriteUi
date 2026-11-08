@@ -25,6 +25,10 @@ struct UIRenderItem {
     std::uint32_t clipIndex = 0xFFFFFFFFu;
     std::uint32_t flags = 0;
 
+    // Corner radius in logical pixels, used when flags has FlagRoundedPanel. Packed into the
+    // reserved slot SpriteInstanceGPU::transformRow1[3]. Negative values are treated as 0.
+    float cornerRadius = 0.0f;
+
     std::int32_t layer = 0;
     float zOrder = 0.0f;
     std::uint64_t paintOrder = 0;

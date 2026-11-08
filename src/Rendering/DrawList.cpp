@@ -24,7 +24,7 @@ namespace {
 [[nodiscard]] bool ValidItem(const UIRenderItem& item) noexcept {
     if (!item.handle.IsValid() || !item.visible || !item.layout.visible) return false;
     if (!IsValidPremultipliedTint(item.tintPremultipliedLinear)) return false;
-    if (!IsFinite(item.zOrder) || !IsFinite(item.layout.resolvedSize) ||
+    if (!IsFinite(item.zOrder) || !IsFinite(item.cornerRadius) || !IsFinite(item.layout.resolvedSize) ||
         !IsFinite(item.layout.resolvedPosition)) return false;
     for (float uv : item.uvRect) {
         if (!IsFinite(uv)) return false;
@@ -177,7 +177,7 @@ FramePacket RenderExtractor::Build(
         instance.transformRow1[0] = affine->m10;
         instance.transformRow1[1] = affine->m11;
         instance.transformRow1[2] = affine->ty;
-        instance.transformRow1[3] = 0.0f;
+        instance.transformRow1[3] = std::max(0.0f, item->cornerRadius);
 
         std::copy(std::begin(item->uvRect), std::end(item->uvRect), std::begin(instance.uvRect));
 

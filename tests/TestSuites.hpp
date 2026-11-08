@@ -12,5 +12,6 @@ void RunCaretAndHitTests();
 void RunFlexWrapTests();
 void RunFlexBaselineTests();
 void RunRobustnessTests();
+void RunVisualTests();
 
 } // namespace SpriteUiTests

@@ -1,5 +1,6 @@
 #include "SpriteUi/Text/TextLayout.hpp"
 
+#include "SpriteUi/Rendering/RenderFlags.hpp"
 #include "SpriteUi/Text/LineBreak.hpp"
 
 #include <algorithm>
@@ -526,7 +527,7 @@ std::vector<Rendering::UIRenderItem> GenerateTextRenderItems(
         item.textureSlice = atlasTextureSlice;
         item.materialIndex = 0;
         item.clipIndex = clipIndex;
-        item.flags = 0x2; // Flag_MSDFText
+        item.flags = Rendering::FlagMsdfText;
         item.zOrder = zOrder;
         item.paintOrder = ++currentPaint;
         item.visible = rect.visible;
