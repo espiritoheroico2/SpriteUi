@@ -12,6 +12,7 @@ void RunCaretAndHitTests();
 void RunFlexWrapTests();
 void RunFlexBaselineTests();
 void RunRobustnessTests();
+void RunNineSliceTests();
 void RunVisualTests();
 
 } // namespace SpriteUiTests

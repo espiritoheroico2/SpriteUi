@@ -1156,6 +1156,8 @@ int main() {
     SpriteUiTests::RunCaretAndHitTests();
     SpriteUiTests::RunFlexWrapTests();
     SpriteUiTests::RunFlexBaselineTests();
+    SpriteUiTests::RunNineSliceTests();
+    SpriteUiTests::RunRobustnessTests();
     SpriteUiTests::RunVisualTests();
 
     if (failures != 0) {

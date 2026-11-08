@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(SpriteUI VERSION 0.5.1 LANGUAGES CXX)
+project(SpriteUI VERSION 0.6.0 LANGUAGES CXX)
 
 option(SPRITEUI_BUILD_EXAMPLES "Build SpriteUI examples" ON)
 option(SPRITEUI_BUILD_TESTS "Build SpriteUI tests" ON)
@@ -10,9 +10,12 @@ add_library(SpriteUI
     src/Input/SpatialNavigation.cpp
     src/Animation/ToonMotion.cpp
     src/Rendering/DrawList.cpp
+    src/Rendering/NineSlice.cpp
     src/Layout/Layout.cpp
     src/Layout/LayoutTree.cpp
     src/Layout/LayoutBridge.cpp
+    src/Text/DebugShaper.cpp
+    src/Text/LineBreak.cpp
     src/Text/TextLayout.cpp
     src/Widgets/Widgets.cpp
     src/Widgets/VirtualList.cpp
@@ -48,9 +51,23 @@ endif()
 
 if(SPRITEUI_BUILD_TESTS)
     enable_testing()
-    add_executable(spriteui_tests tests/test_main.cpp)
+    add_executable(spriteui_tests
+        tests/test_main.cpp
+        tests/test_graph_sampling.cpp
+        tests/test_text_breaking.cpp
+        tests/test_text_layout.cpp
+        tests/test_flex_wrap.cpp
+        tests/test_nine_slice.cpp
+        tests/test_visual.cpp
+        tests/test_robustness.cpp
+        tests/Legacy/LegacyLayout.cpp
+    )
+    target_include_directories(spriteui_tests PRIVATE tests tests/Legacy)
     target_link_libraries(spriteui_tests PRIVATE SpriteUi::SpriteUI)
+    # Visual tests write PNG screenshots here (also asserted on pixel values).
     add_test(NAME SpriteUI.CoreTests COMMAND spriteui_tests)
+    set_tests_properties(SpriteUI.CoreTests PROPERTIES
+        ENVIRONMENT "SPRITEUI_SNAPSHOT_DIR=${CMAKE_CURRENT_BINARY_DIR}/snapshots")
 endif()
 
 include(GNUInstallDirs)
