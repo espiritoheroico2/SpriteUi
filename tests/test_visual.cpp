@@ -201,9 +201,10 @@ void TestVisualClipHierarchy() {
 
     Scene scene;
     for (const auto& rect : clips.effectiveRects) scene.AddClip(rect);
-    scene.Outline({{40, 30}, {200, 140}}, 1.0f, Cyan);
     scene.Rect({{0, 0}, {400, 230}}, SU::Vec4{0.30f, 0.30f, 0.38f, 1.0f}, 0, 0, 0, clips.nodeClipIndices[0]);
     scene.Rect({{0, 0}, {400, 230}}, Orange, 0, 0, 0, clips.nodeClipIndices[1]);
+    scene.Outline({{40, 30}, {200, 140}}, 1.0f, Cyan);     // window clip
+    scene.Outline({{120, 60}, {120, 110}}, 1.0f, Yellow);  // effective (intersected) clip
     const Image image = scene.Render(400, 230);
     Note(SaveSnapshot(image, "05_clip_hierarchy"));
 
@@ -212,6 +213,83 @@ void TestVisualClipHierarchy() {
     CHECK(PixelIs(image, 300, 100, Background));                  // the scroll area sticks out: clipped by the window
     CHECK(PixelIs(image, 200, 190, Background));                  // below the window: clipped
     CHECK(PixelIs(image, 20, 20, Background));                    // outside everything
+}
+
+
+// ---------------------------------------------------------------- text: wrap, alignment, caret, click
+SU::Text::FontMetrics VisualMetrics() {
+    SU::Text::FontMetrics m;
+    m.fontSize = 12.0f; m.unitsPerEm = 1000.0f; m.ascent = 800.0f; m.descent = -200.0f; m.lineGap = 200.0f;
+    return m;
+}
+
+SU::Text::TextLayoutResult LayoutVisual(std::string_view text, float width, SU::Text::TextWrap wrap,
+                                        SU::Text::TextAlignment align) {
+    const auto metrics = VisualMetrics();
+    SU::Text::DebugShaperConfig shaper;
+    shaper.advanceEm = 0.5f;
+    const auto glyphs = SU::Text::ShapeDebug(text, metrics, shaper);
+    SU::Text::TextLayoutConfig config;
+    config.fontSize = 12.0f;
+    config.maxWidth = width;
+    config.wrap = wrap;
+    config.alignment = align;
+    return SU::Text::LayoutText(text, glyphs, metrics, config);
+}
+
+std::string LineText(std::string_view text, const SU::Text::TextLine& line) {
+    std::string s(text.substr(line.byteBegin, line.byteEnd - line.byteBegin));
+    while (!s.empty() && (s.back() == ' ' || s.back() == '\n')) s.pop_back();
+    return s;
+}
+
+void TestVisualTextWrapCaretAndClick() {
+    using SU::Text::TextAlignment;
+    using SU::Text::TextWrap;
+    const std::string text = "The quick brown fox jumps over the lazy dog; supercalifragilisticexpialidocious!";
+    constexpr float Width = 150.0f;
+
+    const auto word = LayoutVisual(text, Width, TextWrap::Word, TextAlignment::Left);
+    const auto chr = LayoutVisual(text, Width, TextWrap::Char, TextAlignment::Left);
+    const auto centered = LayoutVisual(text, Width, TextWrap::Word, TextAlignment::Center);
+
+    Scene scene;
+    const float colX[3] = {12.0f, 182.0f, 352.0f};
+    const SU::Text::TextLayoutResult* layouts[3] = {&word, &chr, &centered};
+    for (int i = 0; i < 3; ++i) {
+        const SU::Vec2 origin{colX[i], 14.0f};
+        scene.Rect({{origin.x - 4, origin.y - 4}, {Width + 8, 150.0f}}, Panel);
+        scene.Outline({{origin.x, origin.y}, {Width, 142.0f}}, 1.0f, {0.30f, 0.34f, 0.44f, 1.0f}); // wrap limit
+        scene.Text(*layouts[i], origin, White);
+        scene.TextGuides(*layouts[i], origin, {0.15f, 0.45f, 0.50f, 1.0f}, {0.55f, 0.20f, 0.45f, 1.0f});
+    }
+    // Carets at a few byte offsets (pen origin, line top) and the result of a click.
+    for (std::uint32_t offset : {0u, 4u, 36u, 70u}) {
+        scene.Caret(SU::Text::GetCaretRect(word, offset), {colX[0], 14.0f}, Yellow);
+    }
+    const SU::Vec2 click{88.0f, 30.0f};
+    const std::uint32_t hit = SU::Text::FindInsertionOffset(word, click);
+    scene.Rect({{colX[0] + click.x - 3, 14.0f + click.y - 3}, {6, 6}}, Red);
+    scene.Caret(SU::Text::GetCaretRect(word, hit), {colX[0], 14.0f}, Green, 2.5f);
+    const Image image = scene.Render(520, 178);
+    Note(SaveSnapshot(image, "06_text_wrap_word_char_center"));
+
+    std::vector<std::string> wordLines, charLines;
+    for (const auto& l : word.lines) wordLines.push_back(LineText(text, l));
+    for (const auto& l : chr.lines) charLines.push_back(LineText(text, l));
+    CHECK(wordLines.size() == 4);
+    CHECK(wordLines[0] == "The quick brown fox jumps");
+    CHECK(wordLines[1] == "over the lazy dog;");              // the long word moved down whole...
+    CHECK(wordLines[2] == "supercalifragilisticexpia");       // ...and only broken because it cannot fit anywhere
+    CHECK(wordLines[3] == "lidocious!");
+    CHECK(wordLines != charLines);                             // Char breaks mid-word, Word does not
+    CHECK(charLines[1] != "over the lazy dog;");
+    CHECK(Near(centered.lines[3].x, (Width - centered.lines[3].width) * 0.5f));
+
+    // Click at x=88 on the first line lands between 'q'-'u'-'i'...: the caret stop nearest to the click.
+    CHECK(Near(SU::Text::GetCaretRect(word, hit).position.x, std::round(88.0f / 6.0f) * 6.0f));
+    // The first glyph box of column 0 is painted in the text colour.
+    CHECK(PixelIs(image, static_cast<int>(colX[0] + 2), 14 + 4, White, 12));
 }
 
 } // namespace
@@ -223,6 +301,7 @@ void RunVisualTests() {
     TestSdfReferenceValues();
     TestVisualSdfPanels();
     TestVisualClipHierarchy();
+    TestVisualTextWrapCaretAndClick();
 }
 
 } // namespace SpriteUiTests

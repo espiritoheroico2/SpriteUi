@@ -1154,6 +1154,8 @@ int main() {
     SpriteUiTests::RunTextBreakingTests();
     SpriteUiTests::RunTextWrapLayoutTests();
     SpriteUiTests::RunCaretAndHitTests();
+    SpriteUiTests::RunFlexWrapTests();
+    SpriteUiTests::RunFlexBaselineTests();
     SpriteUiTests::RunVisualTests();
 
     if (failures != 0) {

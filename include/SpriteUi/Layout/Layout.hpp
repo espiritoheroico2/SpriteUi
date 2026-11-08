@@ -13,11 +13,34 @@ enum class LayoutDirection : std::uint8_t {
     Column
 };
 
+// Cross-axis alignment of an ITEM (read from the child's own style, i.e. CSS align-self).
+// Baseline aligns the baselines of all Baseline items of a line (Row direction only; in a Column it
+// behaves like Start). An item's baseline is FlexItem::baseline; without one it is the bottom edge.
 enum class AlignItems : std::uint8_t {
     Stretch,
     Start,
     Center,
-    End
+    End,
+    Baseline
+};
+
+// Container property: whether children that do not fit the main axis start a new line.
+enum class FlexWrap : std::uint8_t {
+    NoWrap,
+    Wrap
+};
+
+// Container property (only meaningful with FlexWrap::Wrap): how the lines are distributed along the
+// cross axis when there is free cross space. Unlike CSS the default is Start, because stretching
+// every line to fill the container surprises UI authors (tag lists, toolbars).
+enum class AlignContent : std::uint8_t {
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
+    Stretch
 };
 
 enum class JustifyContent : std::uint8_t {
@@ -64,6 +87,14 @@ struct FlexItem {
         std::numeric_limits<float>::infinity(),
         std::numeric_limits<float>::infinity()
     };
+
+    // Container: multi-line layout. The cross-axis gap between lines is `gap` as well.
+    FlexWrap wrap = FlexWrap::NoWrap;
+    AlignContent alignContent = AlignContent::Start;
+
+    // Item: distance from the top edge of the item's box to its first baseline (Row direction).
+    // Negative (default) means "no baseline": the bottom edge is used, like a box without text.
+    float baseline = -1.0f;
 };
 
 struct LayoutNode {
