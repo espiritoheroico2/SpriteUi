@@ -292,6 +292,243 @@ void TestVisualTextWrapCaretAndClick() {
     CHECK(PixelIs(image, static_cast<int>(colX[0] + 2), 14 + 4, White, 12));
 }
 
+
+// ---------------------------------------------------------------- layout: real pipeline, wrap, baseline
+SU::Vec4 Palette(std::size_t i) {
+    static const SU::Vec4 colors[] = {{0.20f, 0.45f, 0.95f, 1.0f}, {0.25f, 0.80f, 0.40f, 1.0f}, {0.95f, 0.55f, 0.15f, 1.0f},
+                                      {0.85f, 0.30f, 0.60f, 1.0f}, {0.60f, 0.45f, 0.95f, 1.0f}, {0.95f, 0.80f, 0.20f, 1.0f}};
+    return colors[i % 6];
+}
+
+SU::LayoutNode FixedBox(float w, float h) {
+    SU::LayoutNode n;
+    n.style.width = {SU::SizeMode::Fixed, w};
+    n.style.height = {SU::SizeMode::Fixed, h};
+    return n;
+}
+
+void DrawLayoutLeaves(Scene& scene, const SU::LayoutNode& node, SU::Vec2 origin, std::size_t& colorIndex) {
+    if (node.children.empty()) {
+        scene.Rect({{origin.x + node.rect.position.x, origin.y + node.rect.position.y}, node.rect.size}, Palette(colorIndex++));
+        return;
+    }
+    for (const auto& child : node.children) DrawLayoutLeaves(scene, child, origin, colorIndex);
+}
+
+// Menu laid out by LayoutTree, turned into render items by LayoutSceneBridge, sorted/batched by the
+// RenderExtractor and rasterized: the whole CPU side of the pipeline, at two viewport sizes.
+struct MenuHandles { SU::UIHandle header, sidebar, content, footer; SU::UIHandle button[3]; };
+
+MenuHandles BuildMenu(SU::LayoutTree& tree, SU::LayoutSceneBridge& bridge) {
+    using namespace SU;
+    MenuHandles h;
+    FlexItem rootStyle;
+    rootStyle.direction = LayoutDirection::Column;
+    rootStyle.width = {SizeMode::Percent, 1.0f};
+    rootStyle.height = {SizeMode::Percent, 1.0f};
+    rootStyle.padding = {24, 24, 24, 24};
+    rootStyle.gap = 12.0f;
+    const UIHandle root = tree.Create({}, rootStyle);
+
+    FlexItem headerStyle; headerStyle.height = {SizeMode::Fixed, 56.0f};
+    h.header = tree.Create(root, headerStyle);
+
+    FlexItem bodyStyle; bodyStyle.direction = LayoutDirection::Row; bodyStyle.gap = 12.0f; bodyStyle.grow = 1.0f;
+    bodyStyle.height = {SizeMode::Flex, 0.0f};
+    const UIHandle body = tree.Create(root, bodyStyle);
+
+    FlexItem sidebarStyle; sidebarStyle.width = {SizeMode::Fixed, 150.0f};
+    h.sidebar = tree.Create(body, sidebarStyle);
+
+    FlexItem contentStyle; contentStyle.direction = LayoutDirection::Column; contentStyle.gap = 10.0f; contentStyle.grow = 1.0f;
+    contentStyle.padding = {12, 12, 12, 12};
+    h.content = tree.Create(body, contentStyle);
+    for (int i = 0; i < 3; ++i) {
+        FlexItem buttonStyle; buttonStyle.height = {SizeMode::Fixed, 44.0f};
+        buttonStyle.margin = {0, 0, i == 1 ? 24.0f : 0.0f, 0}; // Edges = {left, top, right, bottom}: the middle button is inset on the right
+        h.button[i] = tree.Create(h.content, buttonStyle);
+    }
+    FlexItem footerStyle; footerStyle.height = {SizeMode::Fixed, 36.0f};
+    h.footer = tree.Create(root, footerStyle);
+
+    auto visual = [&](UIHandle handle, SU::Vec4 srgb, float z) {
+        ElementVisual v;
+        v.tintPremultipliedLinear = Rendering::SrgbStraightToLinearPremultiplied(srgb);
+        v.zOrder = z;
+        bridge.SetVisual(handle, v);
+    };
+    visual(h.header, {0.20f, 0.45f, 0.95f, 1.0f}, 1.0f);
+    visual(h.sidebar, {0.18f, 0.22f, 0.30f, 1.0f}, 1.0f);
+    visual(h.content, {0.13f, 0.16f, 0.22f, 1.0f}, 1.0f);
+    for (int i = 0; i < 3; ++i) visual(h.button[i], Palette(static_cast<std::size_t>(i + 1)), 2.0f);
+    visual(h.footer, {0.30f, 0.32f, 0.38f, 1.0f}, 1.0f);
+    return h;
+}
+
+void TestVisualMenuThroughTheRealPipeline() {
+    SU::LayoutTree tree;
+    SU::LayoutSceneBridge bridge;
+    const MenuHandles h = BuildMenu(tree, bridge);
+
+    for (const SU::Vec2 size : {SU::Vec2{640.0f, 360.0f}, SU::Vec2{960.0f, 540.0f}}) {
+        tree.Layout({{0.0f, 0.0f}, size});
+        const SU::SceneExtractionResult scene = bridge.Extract(tree);
+
+        SU::Rendering::ExtractionStats stats;
+        const SU::Rendering::FramePacket packet = SU::Rendering::RenderExtractor{}.Build(
+            1, scene.renderItems, &stats, scene.clipHierarchy.effectiveRects);
+        Image image(static_cast<int>(size.x), static_cast<int>(size.y), SU::Rendering::SrgbStraightToLinearPremultiplied(Background));
+        SoftwareRenderBackend backend(image);
+        CHECK(backend.Submit(packet));
+        Note(SaveSnapshot(image, "09_menu_pipeline_" + std::to_string(static_cast<int>(size.x)) + "x" + std::to_string(static_cast<int>(size.y))));
+
+        const SU::Rect header = tree.Get(h.header)->node.rect;
+        const SU::Rect sidebar = tree.Get(h.sidebar)->node.rect;
+        const SU::Rect content = tree.Get(h.content)->node.rect;
+        const SU::Rect footer = tree.Get(h.footer)->node.rect;
+        CHECK(Near(header.size.x, size.x - 48.0f));                       // stretches across the padded root
+        CHECK(Near(footer.position.y + footer.size.y, size.y - 24.0f));   // pinned to the bottom padding
+        CHECK(Near(sidebar.size.x, 150.0f));                              // fixed width regardless of viewport
+        CHECK(Near(content.position.x, sidebar.position.x + 150.0f + 12.0f));
+        CHECK(Near(content.size.x, size.x - 48.0f - 150.0f - 12.0f));     // the rest of the row (grow)
+        CHECK(Near(content.size.y, footer.position.y - 12.0f - (header.position.y + header.size.y + 12.0f))); // body takes the remaining height
+
+        // Buttons: inside the content panel's padding, the middle one inset by its right margin.
+        const SU::Rect b0 = tree.Get(h.button[0])->node.rect;
+        const SU::Rect b1 = tree.Get(h.button[1])->node.rect;
+        CHECK(Near(b0.size.x, content.size.x - 24.0f));
+        CHECK(Near(b1.size.x, content.size.x - 24.0f - 24.0f));
+
+        // Pixels agree with the layout numbers (the full chain CPU -> packet -> raster).
+        const auto cx = [](const SU::Rect& r) { return static_cast<int>(r.position.x + r.size.x * 0.5f); };
+        const auto cy = [](const SU::Rect& r) { return static_cast<int>(r.position.y + r.size.y * 0.5f); };
+        CHECK(PixelIs(image, cx(header), cy(header), {0.20f, 0.45f, 0.95f, 1.0f}));
+        CHECK(PixelIs(image, cx(b0), cy(b0), Palette(1)));
+        CHECK(PixelIs(image, cx(b1), cy(b1), Palette(2)));
+        CHECK(PixelIs(image, cx(sidebar), cy(sidebar), {0.18f, 0.22f, 0.30f, 1.0f}));
+        CHECK(PixelIs(image, 4, 4, Background));                          // the root padding stays empty
+        CHECK(stats.batchCount >= 1 && stats.skippedInvalid == 0);
+    }
+}
+
+void TestVisualFlexWrapAlignContent() {
+    const SU::AlignContent modes[3] = {SU::AlignContent::Start, SU::AlignContent::SpaceBetween, SU::AlignContent::Stretch};
+    const float widths[] = {40, 24, 56, 32, 48, 28, 44, 36, 52};
+
+    Scene scene;
+    std::vector<SU::LayoutNode> containers;
+    for (int c = 0; c < 3; ++c) {
+        SU::LayoutNode root;
+        root.style.direction = SU::LayoutDirection::Row;
+        root.style.wrap = SU::FlexWrap::Wrap;
+        root.style.alignContent = modes[c];
+        root.style.width = {SU::SizeMode::Fixed, 160.0f};
+        root.style.height = {SU::SizeMode::Fixed, 150.0f};
+        root.style.padding = {6, 6, 6, 6};
+        root.style.gap = 6.0f;
+        for (float w : widths) {
+            SU::LayoutNode item = FixedBox(w, 24.0f);
+            if (c == 2) item.style.height = {SU::SizeMode::Auto, 0.0f}; // Stretch demo: items take the line height
+            root.children.push_back(item);
+        }
+        SU::LayoutEngine engine;
+        (void)engine.Measure(root, {500.0f, 500.0f});
+        engine.Arrange(root, {{0.0f, 0.0f}, root.measured});
+        containers.push_back(root);
+
+        const SU::Vec2 origin{10.0f + 175.0f * static_cast<float>(c), 10.0f};
+        scene.Rect({origin, root.measured}, Panel);
+        std::size_t colorIndex = 0;
+        DrawLayoutLeaves(scene, root, origin, colorIndex);
+    }
+    const Image image = scene.Render(540, 170);
+    Note(SaveSnapshot(image, "07_flex_wrap_align_content"));
+
+    // 9 items in a 148px content width wrap into 3 lines (132 / 120 / 144 wide) whatever the alignContent is.
+    for (const auto& root : containers) {
+        std::vector<float> lineYs;
+        for (const auto& item : root.children) {
+            if (lineYs.empty() || std::abs(item.rect.position.y - lineYs.back()) > 0.5f) lineYs.push_back(item.rect.position.y);
+        }
+        CHECK(lineYs.size() == 3);
+        float maxRight = 0.0f;
+        for (const auto& item : root.children) maxRight = std::max(maxRight, item.rect.position.x + item.rect.size.x);
+        CHECK(maxRight <= 160.0f - 6.0f + 1.0e-3f);   // nothing leaks past the padded edge
+    }
+    const auto& start = containers[0].children;
+    const auto& between = containers[1].children;
+    const auto& stretch = containers[2].children;
+    CHECK(Near(start.front().rect.position.y, 6.0f));                       // Start: packed at the top
+    CHECK(Near(between.front().rect.position.y, 6.0f));                     // SpaceBetween: first line at the top...
+    CHECK(Near(between.back().rect.position.y + between.back().rect.size.y, 150.0f - 6.0f)); // ...last line at the bottom
+    CHECK(Near(stretch.front().rect.size.y, stretch.back().rect.size.y));   // Stretch: lines (and items) grow equally
+    CHECK(stretch.front().rect.size.y > 24.0f);
+    // Pixel: the 1st item of the 1st container sits at (16, 16).
+    CHECK(PixelIs(image, 10 + 6 + 3, 10 + 6 + 3, Palette(0)));
+}
+
+void TestVisualBaselineAlignmentWithText() {
+    using namespace SU::Text;
+    FontMetrics metrics;
+    metrics.fontSize = 12.0f; metrics.unitsPerEm = 1000.0f; metrics.ascent = 800.0f; metrics.descent = -200.0f; metrics.lineGap = 0.0f;
+    DebugShaperConfig shaper;
+    shaper.advanceEm = 0.5f;
+
+    struct Label { const char* text; float size; };
+    const Label labels[] = {{"Small", 12.0f}, {"BIG TITLE", 30.0f}, {"medium", 18.0f}};
+
+    Scene scene;
+    float baselineYs[2][3] = {};
+    for (int column = 0; column < 2; ++column) {
+        const bool baselineAligned = column == 1;
+        SU::LayoutNode row;
+        row.style.direction = SU::LayoutDirection::Row;
+        row.style.gap = 8.0f;
+        row.style.padding = {8, 8, 8, 8};
+        row.style.width = {SU::SizeMode::Fixed, 250.0f};
+        row.style.height = {SU::SizeMode::Fixed, 70.0f};
+        std::vector<TextLayoutResult> layouts;
+        for (const Label& label : labels) {
+            FontMetrics m = metrics;
+            m.fontSize = label.size;
+            const auto glyphs = ShapeDebug(label.text, m, shaper);
+            TextLayoutConfig config;
+            config.fontSize = label.size;
+            layouts.push_back(LayoutText(label.text, glyphs, m, config));
+            SU::LayoutNode node = FixedBox(layouts.back().size.x, layouts.back().size.y);
+            node.style.alignItems = baselineAligned ? SU::AlignItems::Baseline : SU::AlignItems::Start;
+            node.style.baseline = label.size * 0.8f;          // ascent = 0.8 em
+            row.children.push_back(node);
+        }
+        SU::LayoutEngine engine;
+        (void)engine.Measure(row, {500.0f, 500.0f});
+        engine.Arrange(row, {{0.0f, 0.0f}, row.measured});
+
+        const SU::Vec2 origin{10.0f + 270.0f * static_cast<float>(column), 10.0f};
+        scene.Rect({origin, row.measured}, Panel);
+        for (std::size_t i = 0; i < 3; ++i) {
+            const SU::Rect& r = row.children[i].rect;
+            baselineYs[column][i] = r.position.y + labels[i].size * 0.8f;
+            scene.Outline({{origin.x + r.position.x, origin.y + r.position.y}, r.size}, 1.0f, {0.30f, 0.34f, 0.44f, 1.0f});
+            scene.Text(layouts[i], {origin.x + r.position.x, origin.y + r.position.y}, White);
+        }
+        if (baselineAligned) {
+            scene.HLine(origin.x, origin.y + baselineYs[1][0], row.measured.x, Magenta);
+        }
+    }
+    const Image image = scene.Render(540, 90);
+    Note(SaveSnapshot(image, "08_baseline_start_vs_baseline"));
+
+    // Start: baselines differ (labels share the top). Baseline: all three coincide.
+    CHECK(std::abs(baselineYs[0][0] - baselineYs[0][1]) > 5.0f);
+    CHECK(Near(baselineYs[1][0], baselineYs[1][1], 1.0e-3f));
+    CHECK(Near(baselineYs[1][1], baselineYs[1][2], 1.0e-3f));
+    // On the magenta baseline of column 1, the pixel row just above it is glyph-coloured for all three labels.
+    const int baselineY = 10 + static_cast<int>(std::lround(baselineYs[1][0]));
+    CHECK(PixelIs(image, 10 + 270 + 8 + 4, baselineY - 3, White, 12));
+    CHECK(PixelIs(image, 10 + 270, baselineY, Magenta, 30));
+}
+
 } // namespace
 
 void RunVisualTests() {
@@ -302,6 +539,9 @@ void RunVisualTests() {
     TestVisualSdfPanels();
     TestVisualClipHierarchy();
     TestVisualTextWrapCaretAndClick();
+    TestVisualMenuThroughTheRealPipeline();
+    TestVisualFlexWrapAlignContent();
+    TestVisualBaselineAlignmentWithText();
 }
 
 } // namespace SpriteUiTests

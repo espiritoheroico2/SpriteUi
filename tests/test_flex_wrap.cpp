@@ -222,7 +222,7 @@ void TestBaselineWithMarginsAndMixedAlignment() {
     root.style.direction = LayoutDirection::Row;
     root.style.height = {SizeMode::Fixed, 60.0f};
     LayoutNode a = BaselineItem(20.0f, 14.0f);
-    a.style.margin = {4.0f, 0.0f, 0.0f, 0.0f};  // top margin
+    a.style.margin = {0.0f, 4.0f, 0.0f, 0.0f};  // Edges = {left, top, right, bottom}: a 4px TOP margin
     LayoutNode b = BaselineItem(30.0f, 24.0f);
     LayoutNode c = Box(30.0f, 10.0f);            // not baseline: centred
     c.style.alignItems = AlignItems::Center;
@@ -275,7 +275,7 @@ void TestBaselineFromTextMetrics() {
 // ------------------------------------------------------------------ robustness + regression
 void TestNonFiniteGapAndSizesStayFinite() {
     LayoutNode root = WrapRow(100.0f, std::nanf(""), 4);
-    root.children[1].style.margin = {std::nanf(""), 0, INFINITY, 0};
+    root.children[1].style.margin = {0, std::nanf(""), 0, INFINITY}; // top = NaN, bottom = Inf
     root.children[2].style.baseline = std::nanf("");
     root.children[2].style.alignItems = AlignItems::Baseline;
     Run(root, 500.0f, 500.0f);
