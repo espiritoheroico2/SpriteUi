@@ -1,13 +1,15 @@
 # SpriteUi 0.6.0: checklist de publicação
 
-Estado em **0.6.0-wip** (branch `feature/v0.6-text-wrap-flex-wrap`, 7 commits sobre o V4.2/0.5.1).
+Estado em **0.6.0**, sem release publicada. A versão declarada no CMake não é uma tag de release.
 
 Legenda: ✅ feito **e verificado** neste ambiente · 🟡 feito, **não verificado** na toolchain alvo ·
 ⬜ pendente · ⛔ bloqueia a publicação.
 
-**Ambiente da verificação:** GCC 13.3 / Linux, C++20, `-Wall -Wextra -Wpedantic -Wconversion -Wshadow`
-(zero avisos), AddressSanitizer + UBSan, **727 checks** passando. **Não verificado:** MSVC, Clang,
-CMake, compilação do HLSL, qualquer GPU.
+**Ambiente verificado nesta rodada:** Windows, MSVC 14.51, CMake/Ninja Debug e Release,
+`spriteui_check_headers`, CTest (core + pacote consumidor), exemplos CLI, DXC VS/PS e **727 checks**
+passando em Debug. O benchmark CPU também foi executado localmente nas duas configurações. O
+adaptador SDL3 e o pacote instalado passaram com SDL 3.2.30.
+**Não verificado nesta rodada:** Clang/GCC, sanitizers, CI remoto e qualquer GPU real.
 
 ---
 
@@ -28,11 +30,16 @@ CMake, compilação do HLSL, qualquer GPU.
 | ✅ | **Robustez**: fuzz do parser JSON (6.000 mutações + 2.000 aleatórias), clip hostil, extrator corrompido | `test_robustness.cpp`: nenhuma falha encontrada |
 | ✅ | **Regressão visual**: backend de software + PNG, 10 screenshots com asserção de pixels | `tests/Visual/`, `docs/img/` |
 | ✅ | Constantes de flags nomeadas (o código usava `0x2`) | `Rendering/RenderFlags.hpp` |
-| 🟡 | Shader: painel SDF (`FlagRoundedPanel`), `local`/`panel` interpolantes | `shaders/SpriteUI.hlsl` **não compilado** |
-| 🟡 | `CMakeLists.txt` com os novos fontes/testes e `SPRITEUI_SNAPSHOT_DIR` | **não executado** (sem cmake no ambiente) |
+| ✅ | Shader HLSL de referência | Compilado com DXC para VS/PS DXIL; execução e paridade em GPU continuam pendentes |
+| ✅ | Build CMake e alvo de headers públicos | Build Debug MSVC, `spriteui_check_headers` e CTest executados |
+| ✅ | Build de produção MSVC Release | Build Release, checagem de headers, CTest e package smoke test passaram |
+| ✅ | CI multiplataforma configurado | `.github/workflows/ci.yml`: MSVC, GCC, Clang, job ASan/UBSan e build do adaptador SDL3 com SDL 3.2.30; execução remota pendente |
+| ✅ | Smoke test de pacote instalado | CTest instala a biblioteca e compila consumidor independente via `find_package`; aprovado em MSVC Debug e Release |
+| ✅ | Benchmarks CPU básicos | Alvo opcional executado localmente em Debug e Release; baseline e budgets pendentes |
+| ✅ | Adaptador de input SDL3 opcional | Compilado com SDL 3.2.30; CTest (core + pacote consumidor) aprovado localmente |
 
 ### Mudanças de comportamento: nenhuma quebra de API
-Todas as APIs existentes mantêm o comportamento (os 298 checks originais seguem passando). O que
+Todas as APIs existentes mantêm o comportamento; o executável reportou 727 checks aprovados. O que
 poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCaretRect`,
 `FindInsertionOffset`, `LayoutText(utf8, ...)`) e as versões antigas ficaram documentadas como legado.
 **Decisão sua pendente:** quando marcar as antigas como `[[deprecated]]`.
@@ -43,16 +50,17 @@ poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCare
 
 | # | Pendência | Por que bloqueia | Como fechar |
 |---|---|---|---|
-| ⛔ | **Compilar e rodar no alvo real**: CMake configure + build + `ctest`, **MSVC `/W4 /permissive-`** (alvo principal) e Clang | Só validei GCC. MSVC costuma achar `-Wconversion`-like, `std::span`/`<numbers>` e diferenças de float | `cmake --preset ...`; rodar `spriteui_tests` e `spriteui_check_headers` |
-| ⛔ | **Compilar `SpriteUI.hlsl` (DXC)** e validar em GPU | Alterei o shader (SDF) sem compilador HLSL aqui | `dxc -T ps_6_0`; comparar com os PNGs de `docs/img/03..04` (paridade CPU↔GPU) |
-| ⛔ | **CI** (GitHub Actions ou equivalente): GCC, Clang, MSVC + job ASan/UBSan | Hoje nada impede regressão; o repositório não tem `.github/` | matriz de 3 compiladores + sanitizers + `-Werror` |
+| ⛔ | **Completar matriz de toolchains**: Clang e GCC, além de sanitizers | MSVC Debug e Release foram verificados; outras toolchains não foram verificadas nesta rodada | Rodar configure/build/test/header checks em Clang/GCC e sanitizers |
+| ⛔ | **Validar HLSL em GPU real** | DXC gerou os shaders; ainda não há backend nem teste de paridade CPU↔GPU | Implementar backend e comparar resultados com `docs/img/03..04` |
+| ⛔ | **Executar e estabilizar o CI** | Workflow foi adicionado, mas ainda não há resultado remoto confirmado | Executar no GitHub Actions, corrigir falhas e manter a matriz verde |
 | ⛔ | **Decidir o escopo da versão publicada**: "núcleo sem backend" ou "com Flecs/Diligent/HarfBuzz" | O README/§8 listam Flecs, Diligent, janela OS e HarfBuzz como pendentes | Se for núcleo: dizer isso no README e na descrição do pacote |
-| ⛔ | **Sincronizar o documento normativo com o código** (ver §4) | O documento diz que a chave de ordenação é por material; o código (corretamente) não | aplicar a errata em `docs/ERRATA_V4_3.md` ao V4.4 |
+| ⛔ | **Sincronizar toda a documentação de arquitetura com o código** | Os textos normativos ainda contêm contratos e exemplos históricos que não correspondem à entrega | Manter status de implementação e limites explícitos nos documentos e revisar a especificação antes de uma nova versão |
 
 ## 3. Recomendado antes do 1.0 (⬜)
 
 **Qualidade**
-- ⬜ Benchmarks desta base (layout, extração, JSON, texto) com orçamento por frame; não foram medidos aqui
+- ⬜ Baselines e orçamento por frame para benchmarks (alvo atual cobre layout e extração; JSON/texto ainda faltam)
+- Referência local (Windows/MSVC; 250 iterações, 1.000 filhos/itens): Debug — layout 1,90 ms/frame, extração 1,70 ms/frame; Release — layout 0,066 ms/frame, extração 0,205 ms/frame. Medições indicativas, sem controle de ruído ou meta de aprovação.
 - ⬜ Fuzz contínuo do JSON (libFuzzer/OSS-Fuzz) com corpus; hoje o fuzz roda dentro dos testes
 - ⬜ Cobertura de código (gcov/llvm-cov) e meta mínima
 - ⬜ Testes de paridade CPU↔GPU (captura do backend real contra `docs/img`)
@@ -61,12 +69,12 @@ poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCare
 **API e compatibilidade**
 - ⬜ Revisão da API pública (nomes, `[[nodiscard]]`, `noexcept`, ordem de campos de `Edges`: `{left, top, right, bottom}` enganou duas vezes nos testes)
 - ⬜ Política de versão semântica e de depreciação (0.x → 1.0); congelar a ABI de GPU (80 bytes, já com `static_assert`)
-- ⬜ Documentar thread-safety (quais tipos são seguros entre threads)
+- ✅ Notas de thread-safety do core documentadas; contratos de adaptadores/backends futuros permanecem pendentes
 - ⬜ `AlignContent` tem padrão `Start` (o CSS usa `stretch`) e o wrap usa um único `gap` para as duas direções: confirmar ou mudar
 
 **Documentação e projeto**
-- ⬜ `README.md` com screenshots (`docs/img/`), quick start e limites
-- ⬜ `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md` (política de relato de vulnerabilidades)
+- ✅ `README.md` com screenshots do backend de software, quick start e limites
+- ✅ `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md` e notas de thread-safety adicionados
 - ⬜ Referência de API (Doxygen) e guia de integração na engine
 - ⬜ `THIRD_PARTY_NOTICES` quando entrarem Diligent (Apache-2.0), Flecs/QuickJS/HarfBuzz (MIT) e FreeType (FTL/GPLv2: escolher)
 - ✅ `LICENSE`, `.clang-format`, `.editorconfig`, `CMakePresets.json` já existem
@@ -77,31 +85,31 @@ poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCare
 
 | # | Documento | Código | Ação |
 |---|---|---|---|
-| 1 | §2/Spec: chave de 64 bits `Canvas│Layer│Clip│**Material**│Sibling`, ordenação por inteiro | `RenderExtractor` ordena por `(layer, zOrder, paintOrder)` e só agrupa itens **adjacentes** | O **código está certo**: o §2 inverte a ordem de pintura de translucentes (`docs/img/02_*`). Corrigir o documento |
-| 2 | Matriz de QA: categorias somam **268** (42+65+48+38+45+30); título diz **298** | 298 *checks* (assertions) em ~16 funções de teste | Reescrever a matriz com a contagem real por suíte |
-| 3 | QA cita 65 testes de "Flexbox & Nine-Slice" | Nine-Slice não existia | **Implementado nesta rodada** |
-| 4 | QA cita testes de HarfBuzz/MSDF e validação MSVC/GCC/Clang | HarfBuzz pendente; só GCC verificado | Remover a afirmação ou marcá-la como alvo |
-| 5 | §7 Spec: SDF `min(max(p_x−b_x+r, p_y−b_y+r), 0)` sem `|·|` e sem limitar o raio | `EvaluatePanelSdf` usa `abs` e limita `r ≤ min(halfSize)` | Corrigir a fórmula do documento |
-| 6 | §2.1, §5: blocos de código corrompidos (`UIInputSnapshot`, `EvaluateShake`) | n/a | Restaurar a partir do código (`ToonMotion.cpp`) |
-| 7 | §3 numeração de seções fora de ordem | n/a | Renumerar |
+| 1 | A especificação sugere ordenar por material | `RenderExtractor` ordena por `(layer, zOrder, paintOrder)` e só agrupa itens adjacentes | Preservar a ordem visual do código; atualizar a especificação antes de tratá-la como contrato de batching |
+| 2 | Matriz de QA e quantidades por categoria são históricas e inconsistentes | A execução atual reporta 727 checks totais; não foi validada uma contagem por categoria | Não publicar números por suíte sem recalcular a matriz |
+| 3 | Estado antigo diz que Flex wrap, quebra por palavra e Nine-Slice não existem | Essas capacidades e testes estão no código atual | Estado atualizado neste checklist; manter os documentos de arquitetura sincronizados |
+| 4 | Alegações de integração HarfBuzz/FreeType e validação em múltiplas toolchains | Shaper de debug existe; integração real de fontes pendente. MSVC/DXC foram verificados; Clang/GCC não nesta rodada | Distinguir código auxiliar de integração de produção e registrar a toolchain usada |
+| 5 | Contratos de SDF e exemplos de input/animação diferem do código atual | Implementações de referência estão em `PanelSdf`, `InputRouter` e `ToonMotion` | Revisar os exemplos e fórmulas normativos antes de uma nova versão da especificação |
+| 6 | Seções e histórico misturam material legado e contratos atuais | O documento contém versões e fases de planejamento anteriores | Identificar explicitamente conteúdo histórico e manter a seção de status atualizada |
 
-## 5. Limitações conhecidas desta rodada (documentar no README)
+## 5. Limitações conhecidas desta rodada
 
-- Texto: sem **bidi/RTL** (ordem não monotônica cai no caminho legado), sem hifenização por idioma, sem kerning (é do HarfBuzz)
-- Nine-Slice: só itens alinhados aos eixos (sem rotação/escala); não está ligado ao `LayoutBridge`/`ElementVisual`
-- Painel SDF: só preenchimento + raio; **borda e sombra** precisam de espaço na ABI (usar `UIMaterialGPU`)
-- Baseline: só em `Row`; em `Column` equivale a `Start`
-- O backend de software dos testes **não** é o backend de produção: valida a matemática, não o driver
+- Texto: sem integração HarfBuzz/FreeType nem bidi/RTL ou hifenização por idioma; o core aceita glifos shaped e não faz shaping de produção.
+- Nine-Slice: cálculo para itens alinhados aos eixos, sem rotação/escala; ainda não ligado ao `LayoutBridge`/`ElementVisual`.
+- Painel SDF: referência para preenchimento arredondado; bordas, sombras e efeitos continuam pendentes.
+- Baseline: implementado em `Row`; em `Column` equivale a `Start`.
+- O backend de software dos testes **não** é o backend de produção: valida a matemática, não o driver.
+- O adaptador SDL3 limita-se a eventos de mouse/foco; criação da janela, teclado/gamepad, clipboard e IME não fazem parte deste primeiro passo.
 
 ## 6. Caminho crítico sugerido
 
-1. Rodar `cmake` + `ctest` em **MSVC e Clang** e corrigir o que aparecer
-2. Compilar o HLSL e validar o painel SDF contra `docs/img/03_*` e `04_*`
-3. Montar o **CI** (3 compiladores + sanitizers)
-4. Decidir o escopo (núcleo vs. com backends) e ajustar README/versão
-5. Aplicar a errata ao documento (V4.4) e fechar `README`/`CHANGELOG`/`CONTRIBUTING`/`SECURITY`
-6. Medir benchmarks e fixar o orçamento por frame
-7. Tag `v0.6.0` (ou `v1.0.0` se o escopo for só o núcleo)
+1. Decidir e documentar o escopo de release (core CPU vs. UI com integrações)
+2. Implementar backend Diligent e validar HLSL/paridade em GPU real
+3. Implementar adaptadores ECS/plataforma conforme o escopo escolhido
+4. Completar matriz Clang/GCC/MSVC, Release, sanitizers e CI
+5. Testar instalação/exportação com um projeto consumidor e `find_package`
+6. Medir benchmarks, documentar limites, thread-safety e política de versão
+7. Preparar CHANGELOG, instruções de contribuição/segurança, tag e artefato limpo
 
 ## 7. Como reproduzir a verificação
 

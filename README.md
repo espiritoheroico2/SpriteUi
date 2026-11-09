@@ -1,10 +1,10 @@
 # SpriteUI
 
-**Versão:** 0.5.1 — núcleo C++20 (layout, input, widgets, docking, texto, config), baseado na especificação V4.2. Revisão e conformidade: `docs/REVIEW_V4_2.md`. Convenções: `docs/CODING_STANDARDS.md`.
+**Versão CMake:** 0.6.0 — núcleo C++20 (layout, input, widgets, docking, texto, config). A versão ainda não implica uma release publicada. Estado atual: `docs/IMPLEMENTATION_STATUS.md`; checklist de release: `docs/RELEASE_CHECKLIST.md`.
 
 SpriteUI é o início executável de uma biblioteca de interface 2D orientada a dados. O núcleo matemático, input, widgets lógicos, animação e extração de comandos são independentes de ECS e de API gráfica, para que Flecs e Diligent possam ser integrados por adaptadores sem contaminar os contratos públicos.
 
-> Importante: esta entrega não é ainda uma GUI com janela visível. O backend incluído é `NullRenderBackend`, usado para validar pacotes e o fluxo CPU. O backend Diligent, a integração Flecs, a renderização GPU e a tipografia ainda são etapas futuras.
+> Importante: esta entrega ainda não é uma GUI com janela visível. O backend incluído é `NullRenderBackend`, usado para validar pacotes e o fluxo CPU. O shader compila para DXIL, mas backend Diligent, integração Flecs, submissão a GPU real e shaping de fontes de produção ainda são etapas futuras.
 
 ## Funcionalidades implementadas
 
@@ -24,6 +24,9 @@ SpriteUI é o início executável de uma biblioteca de interface 2D orientada a 
 - Extração de instâncias, ordenação visual e batching apenas entre comandos consecutivos compatíveis.
 - Árvore de layout com relações explícitas, remoção recursiva segura e validação de parent handles.
 - Alinhamento transversal de itens (Stretch/Start/Center/End).
+- Flex wrap, alinhamento de conteúdo e alinhamento por baseline em linhas.
+- Quebra de texto por palavra no subconjunto implementado, incluindo regras para espaços, hífen, ZWSP, NBSP, CJK e clusters.
+- Nine-Slice e referência CPU para painéis SDF arredondados.
 - Interseção de clipping hierárquico para renderização e clip bounds em hit-testing.
 - Validação estrutural de `FramePacket` antes da submissão.
 - Shader HLSL de referência alinhado à ABI.
@@ -33,19 +36,82 @@ SpriteUI é o início executável de uma biblioteca de interface 2D orientada a 
 
 | Módulo | Estado |
 |---|---|
-| Flexbox: wrap, align-self distinto de align-items, baseline | Pendente (grow/shrink com freeze de min/max e justify-content implementados) |
+| Flexbox | Wrap, `alignContent`, baseline, `justifyContent` e grow/shrink com limites implementados; não cobre toda a especificação CSS |
 | Flecs ECS adapter | Pendente |
 | Diligent Engine backend, buffers reais e fences | Pendente |
-| SDL3/GLFW, janela, clipboard, IME e input multi-pointer | Pendente |
-| Widgets visuais (desenho), drag & drop de docking | Pendente (lógica de janelas, abas e dock tree implementada) |
-| HarfBuzz, FreeType, grapheme clusters, MSDF atlas | Pendente (layout geométrico de glifos já shaped implementado; `TextWrap::Word` ainda quebra por glifo) |
+| SDL3 | Adaptador opcional de mouse/foco implementado; janela, clipboard, IME e input multi-pointer pendentes |
+| GLFW | Pendente |
+| Widgets visuais (desenho), drag & drop de docking | Pendente (lógica de widgets, janelas, abas e dock tree implementada) |
+| HarfBuzz, FreeType e atlas MSDF de produção | Pendente (layout geométrico, caret e quebra de linha por palavra no subconjunto implementado) |
 | ToonMotion timeline/keyframes e integração ECS | Pendente |
 | KTX2/Basis, streaming e eviction por fences | Pendente |
 | Light Prism ClusterLit, Bloom, Acrylic Blur e sombras | Pendente |
 | Partículas e nodes de editor | Pendente |
 | QuickJS sandbox e FFI | Pendente |
 
-O estado completo e a correspondência com o documento V4.2 estão em `docs/IMPLEMENTATION_STATUS.md` e `docs/V4_2_IMPLEMENTATION_MAP.md`.
+O estado completo e os limites verificados estão em `docs/IMPLEMENTATION_STATUS.md`. Os documentos de arquitetura descrevem também funcionalidades planejadas; consulte neles as seções de estado antes de tratar uma integração como concluída.
+
+## Início rápido
+
+Exemplo mínimo de extração e validação de um pacote de renderização, sem janela nem GPU:
+
+```cpp
+#include <SpriteUi/SpriteUi.hpp>
+
+#include <vector>
+
+int main() {
+    using namespace ToolEngine::SpriteUi;
+
+    Rendering::UIRenderItem item;
+    item.handle = {1, 1};
+    item.layout.resolvedPosition = {20.0f, 20.0f};
+    item.layout.resolvedSize = {160.0f, 40.0f};
+
+    Rendering::RenderExtractor extractor;
+    const std::vector<Rendering::UIRenderItem> items{item};
+    const auto packet = extractor.Build(1, items);
+
+    Rendering::NullRenderBackend backend;
+    return backend.Submit(packet) ? 0 : 1;
+}
+```
+
+O exemplo não cria nem desenha uma janela. Para compilar um consumidor instalado, veja o teste `tests/package_consumer` e as instruções de build abaixo.
+
+### Adaptador opcional SDL3
+
+O adaptador conecta eventos SDL3 de mouse/foco ao `UIInputSnapshot`; ele não cria janelas nem escolhe uma API gráfica. O core continua sem dependências SDL3.
+
+```sh
+cmake -S . -B build-sdl -DSPRITEUI_BUILD_SDL3_ADAPTER=ON
+cmake --build build-sdl --parallel
+```
+
+É necessário SDL **3.2+** instalado com o pacote CMake `SDL3`. Depois de inicializar SDL e criar uma janela, encaminhe cada evento recebido e consuma um snapshot por frame:
+
+```cpp
+Platform::SDL3InputAdapter platformInput(window);
+SDL_Event event;
+while (SDL_PollEvent(&event)) {
+    platformInput.ProcessEvent(event);
+}
+const auto snapshot = platformInput.BuildSnapshot(frameId);
+const auto uiEvents = eventRouter.Process(snapshot, hitTargets);
+```
+
+O adaptador deve ser criado e usado na thread principal de SDL, a janela deve permanecer viva enquanto ele for usado, e eventos de outras janelas são ignorados. O target de integração é `SpriteUi::SDL3Input`; para usá-lo, inclua `<SDL3/SDL.h>` antes ou depois do header umbrella e faça `find_package(SDL3 3.2 CONFIG REQUIRED)`.
+
+## Capturas de referência
+
+Estas imagens são produzidas pelo backend de software dos testes e documentam resultados CPU; não são capturas de uma GPU ou backend de produção.
+
+| Menu e composição | Texto e layout flexível |
+|---|---|
+| ![Pipeline de menu em 960 x 540](docs/img/09_menu_pipeline_960x540.png) | ![Wrap e alinhamento do layout flexível](docs/img/07_flex_wrap_align_content.png) |
+| ![Painéis SDF arredondados em DPI 1](docs/img/03_sdf_rounded_panels_dpi1.png) | ![Wrap de texto e alinhamento](docs/img/06_text_wrap_word_char_center.png) |
+
+Mais imagens de clipping, baseline, Nine-Slice e ordem de pintura estão em [`docs/img/`](docs/img/).
 
 ## Requisitos
 
@@ -75,12 +141,23 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
+O CTest também instala o pacote num diretório temporário e compila um consumidor separado
+com `find_package(SpriteUI CONFIG REQUIRED)`.
+
 Build Release:
 
 ```sh
 cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
 cmake --build build-release --parallel
 ctest --test-dir build-release --output-on-failure
+```
+
+Benchmarks CPU opcionais (informativos, sem limites de aprovação):
+
+```sh
+cmake -S . -B build-bench -DSPRITEUI_BUILD_TESTS=OFF -DSPRITEUI_BUILD_BENCHMARKS=ON
+cmake --build build-bench --target spriteui_benchmarks --parallel
+./build-bench/spriteui_benchmarks
 ```
 
 ## Executar o exemplo
@@ -147,6 +224,10 @@ Não armazene ponteiros da RHI nos componentes ECS. Utilize handles com geraçã
 
 MIT. Dependências externas a integrar no futuro mantêm as respetivas licenças.
 
+## Contribuição e segurança
+
+Consulte [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) e [docs/THREAD_SAFETY.md](docs/THREAD_SAFETY.md).
+
 ## Layout Core (incremental)
 
 `SpriteUi/Layout/Layout.hpp` fornece `LayoutEngine` com fases `Measure` e `Arrange`, direção Row/Column, tamanho Fixed/Percent/Auto/Flex, grow/shrink, gap, padding, margins e limites min/max. `LayoutTree` permite compor uma árvore com `UIHandle` sem dependência de ECS.
@@ -164,4 +245,4 @@ tree.Create(root, child);
 tree.Layout({{0,0},{640,480}});
 ```
 
-Este é um subset de Flex: o algoritmo atual não implementa ainda o ciclo completo de freeze/re-distribuição para min/max, wrap, justify-content, align-self ou percentuais com bases intrínsecas complexas. `BuildClipHierarchy` recebe clips em ordem pai-antes-do-filho e retorna interseções efetivas; o índice resultante pode ser atribuído a `UIRenderItem::clipIndex`. Para input, `HitTarget::clipRectLogical` deve receber o clip efetivo em coordenadas lógicas. Veja `docs/IMPLEMENTATION_STATUS.md` para limites e próximos passos.
+Este é um subconjunto de Flex: há freeze/re-distribuição para limites, wrap, `justifyContent`, `alignContent` e baseline; não há implementação de todas as regras CSS nem bases intrínsecas complexas. `BuildClipHierarchy` recebe clips em ordem pai-antes-do-filho e retorna interseções efetivas; o índice resultante pode ser atribuído a `UIRenderItem::clipIndex`. Para input, `HitTarget::clipRectLogical` deve receber o clip efetivo em coordenadas lógicas. Veja `docs/IMPLEMENTATION_STATUS.md` para limites e próximos passos.

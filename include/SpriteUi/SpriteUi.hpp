@@ -8,6 +8,7 @@
 
 #include "SpriteUi/Input/InputRouter.hpp"
 #include "SpriteUi/Input/SpatialNavigation.hpp"
+#include "SpriteUi/Platform/SDL3InputAdapter.hpp"
 
 #include "SpriteUi/Layout/Layout.hpp"
 #include "SpriteUi/Layout/LayoutTree.hpp"

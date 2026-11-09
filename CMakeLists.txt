@@ -3,6 +3,8 @@ project(SpriteUI VERSION 0.6.0 LANGUAGES CXX)
 
 option(SPRITEUI_BUILD_EXAMPLES "Build SpriteUI examples" ON)
 option(SPRITEUI_BUILD_TESTS "Build SpriteUI tests" ON)
+option(SPRITEUI_BUILD_BENCHMARKS "Build lightweight CPU benchmarks" OFF)
+option(SPRITEUI_BUILD_SDL3_ADAPTER "Build the optional SDL3 window-input adapter" OFF)
 option(SPRITEUI_ENABLE_WARNINGS "Enable strict compiler warnings" ON)
 
 add_library(SpriteUI
@@ -25,6 +27,30 @@ add_library(SpriteUI
     src/Config/UIConfig.cpp
 )
 add_library(SpriteUi::SpriteUI ALIAS SpriteUI)
+
+if(SPRITEUI_BUILD_SDL3_ADAPTER)
+    find_package(SDL3 3.2 CONFIG REQUIRED COMPONENTS SDL3)
+
+    add_library(SpriteUI_SDL3Input src/Platform/SDL3InputAdapter.cpp)
+    add_library(SpriteUi::SDL3Input ALIAS SpriteUI_SDL3Input)
+    set_target_properties(SpriteUI_SDL3Input PROPERTIES EXPORT_NAME SDL3Input)
+    target_compile_features(SpriteUI_SDL3Input PUBLIC cxx_std_20)
+    target_include_directories(SpriteUI_SDL3Input
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+    )
+    target_link_libraries(SpriteUI_SDL3Input
+        PUBLIC SpriteUi::SpriteUI SDL3::SDL3
+    )
+    if(SPRITEUI_ENABLE_WARNINGS)
+        if(MSVC)
+            target_compile_options(SpriteUI_SDL3Input PRIVATE /W4 /permissive-)
+        else()
+            target_compile_options(SpriteUI_SDL3Input PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+        endif()
+    endif()
+endif()
 
 target_compile_features(SpriteUI PUBLIC cxx_std_20)
 target_include_directories(SpriteUI
@@ -68,6 +94,27 @@ if(SPRITEUI_BUILD_TESTS)
     add_test(NAME SpriteUI.CoreTests COMMAND spriteui_tests)
     set_tests_properties(SpriteUI.CoreTests PROPERTIES
         ENVIRONMENT "SPRITEUI_SNAPSHOT_DIR=${CMAKE_CURRENT_BINARY_DIR}/snapshots")
+
+    add_test(NAME SpriteUI.PackageSmoke
+        COMMAND ${CMAKE_COMMAND}
+            "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+            "-DBINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-smoke"
+            "-DPROJECT_BINARY_DIR=${CMAKE_BINARY_DIR}"
+            "-DGENERATOR=${CMAKE_GENERATOR}"
+            "-DDEPENDENCY_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
+            "-DGENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+            "-DGENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+            "-DCXX_COMPILER=${CMAKE_CXX_COMPILER}"
+            "-DCXX_FLAGS=${CMAKE_CXX_FLAGS}"
+            "-DEXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
+            "-DCONFIG=$<CONFIG>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/PackageSmokeTest.cmake"
+    )
+endif()
+
+if(SPRITEUI_BUILD_BENCHMARKS)
+    add_executable(spriteui_benchmarks benchmarks/spriteui_benchmarks.cpp)
+    target_link_libraries(spriteui_benchmarks PRIVATE SpriteUi::SpriteUI)
 endif()
 
 include(GNUInstallDirs)
@@ -77,6 +124,18 @@ install(TARGETS SpriteUI
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+if(SPRITEUI_BUILD_SDL3_ADAPTER)
+    install(TARGETS SpriteUI_SDL3Input
+        EXPORT SpriteUITargets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+    set(SPRITEUI_CONFIG_SDL3_DEPENDENCY
+        "include(CMakeFindDependencyMacro)\nfind_dependency(SDL3 3.2 CONFIG COMPONENTS SDL3)")
+else()
+    set(SPRITEUI_CONFIG_SDL3_DEPENDENCY "")
+endif()
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 set(SPRITEUI_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/SpriteUI")
 install(EXPORT SpriteUITargets
