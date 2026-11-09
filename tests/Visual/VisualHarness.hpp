@@ -171,8 +171,19 @@ inline void AppendChunk(std::vector<std::uint8_t>& out, const char* type, const 
 
 // Directory for screenshots: $SPRITEUI_SNAPSHOT_DIR, else ./snapshots.
 [[nodiscard]] inline std::filesystem::path SnapshotDir() {
+#if defined(_MSC_VER)
+    char* env = nullptr;
+    std::size_t envSize = 0;
+    if (_dupenv_s(&env, &envSize, "SPRITEUI_SNAPSHOT_DIR") == 0 && env != nullptr) {
+        const std::filesystem::path path(env);
+        std::free(env);
+        if (!path.empty()) return path;
+    }
+#else
     const char* env = std::getenv("SPRITEUI_SNAPSHOT_DIR");
-    return std::filesystem::path(env && *env ? env : "snapshots");
+    if (env && *env) return std::filesystem::path(env);
+#endif
+    return "snapshots";
 }
 
 // Returns the written path (empty on failure; a failed save never fails a test by itself).
@@ -184,6 +195,7 @@ inline std::string SaveSnapshot(const Image& image, const std::string& name) {
     if (!file) return {};
     const auto png = EncodePng(image);
     file.write(reinterpret_cast<const char*>(png.data()), static_cast<std::streamsize>(png.size()));
+    if (!file) return {};
     return path.string();
 }
 
@@ -258,6 +270,8 @@ private:
                         SU::Vec4 c{inst.tint[0], inst.tint[1], inst.tint[2], inst.tint[3]};
                         if ((flags & R::FlagMsdfText) != 0u) {
                             c = {c.x * texel.x, c.y * texel.x, c.z * texel.x, c.w * texel.x}; // r channel = coverage
+                        } else if ((flags & R::FlagBitmapText) != 0u) {
+                            c = {c.x * texel.x, c.y * texel.x, c.z * texel.x, c.w * texel.x};
                         } else {
                             c = {c.x * texel.x, c.y * texel.y, c.z * texel.z, c.w * texel.w};
                         }
@@ -315,11 +329,15 @@ public:
         return Rect({{x, y}, {thickness, length}}, srgb);
     }
 
-    // Each glyph quad of a text layout becomes a rectangle (a debug "font": boxes, not MSDF).
-    Scene& Text(const SU::Text::TextLayoutResult& layout, SU::Vec2 origin, SU::Vec4 srgb) {
+    // Each glyph quad becomes a textured rectangle from the selected atlas page.
+    Scene& Text(const SU::Text::TextLayoutResult& layout, SU::Vec2 origin, SU::Vec4 srgb,
+                std::uint32_t textureSlice = R::WhiteTextureSlice,
+                std::uint32_t flags = R::FlagMsdfText) {
         for (const auto& q : layout.quads) {
             if (q.bounds.size.x <= 0.0f || q.bounds.size.y <= 0.0f) continue;
-            Rect({{origin.x + q.bounds.position.x, origin.y + q.bounds.position.y}, q.bounds.size}, srgb);
+            Rect({{origin.x + q.bounds.position.x, origin.y + q.bounds.position.y}, q.bounds.size},
+                 srgb, textureSlice, flags);
+            std::copy(std::begin(q.uvRect), std::end(q.uvRect), items_.back().uvRect);
         }
         return *this;
     }

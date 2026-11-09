@@ -126,6 +126,7 @@ std::vector<UIEvent> UIEventRouter::Process(
         cancelled.primaryDown = false;
         cancelled.primaryPressed = false;
         cancelled.primaryReleased = false;
+        cancelled.pointerCancelled = true;
         cancelled.windowFocused = false;
         return Process(cancelled, targets);
     }
@@ -161,6 +162,17 @@ std::vector<UIEvent> UIEventRouter::Process(
         if (oldFocus) {
             PushEvent(events, UIEventType::FocusLost, *oldFocus, input, {});
         }
+        state_ = {};
+        state_.capturedEntity = InvalidUIHandle;
+        state_.focusedEntity = InvalidUIHandle;
+        state_.hoveredEntity = InvalidUIHandle;
+        return events;
+    }
+
+    if (input.pointerCancelled) {
+        if (capture) PushEvent(events, UIEventType::Cancel, *capture, input, {});
+        if (oldHover) PushEvent(events, UIEventType::PointerLeave, *oldHover, input, {});
+        if (oldFocus) PushEvent(events, UIEventType::FocusLost, *oldFocus, input, {});
         state_ = {};
         state_.capturedEntity = InvalidUIHandle;
         state_.focusedEntity = InvalidUIHandle;

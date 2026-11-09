@@ -494,7 +494,8 @@ std::vector<Rendering::UIRenderItem> GenerateTextRenderItems(
     std::uint32_t clipIndex,
     float zOrder,
     std::uint64_t basePaintOrder,
-    UIHandle owner)
+    UIHandle owner,
+    std::uint32_t renderFlags)
 {
     std::vector<Rendering::UIRenderItem> items;
     items.reserve(layout.quads.size());
@@ -527,7 +528,7 @@ std::vector<Rendering::UIRenderItem> GenerateTextRenderItems(
         item.textureSlice = atlasTextureSlice;
         item.materialIndex = 0;
         item.clipIndex = clipIndex;
-        item.flags = Rendering::FlagMsdfText;
+        item.flags = renderFlags;
         item.zOrder = zOrder;
         item.paintOrder = ++currentPaint;
         item.visible = rect.visible;

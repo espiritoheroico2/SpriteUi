@@ -24,7 +24,7 @@ namespace {
 [[nodiscard]] bool ValidItem(const UIRenderItem& item) noexcept {
     if (!item.handle.IsValid() || !item.visible || !item.layout.visible) return false;
     if (!IsValidPremultipliedTint(item.tintPremultipliedLinear)) return false;
-    if (!IsFinite(item.zOrder) || !IsFinite(item.cornerRadius) || !IsFinite(item.layout.resolvedSize) ||
+    if (!IsFinite(item.opacity) || !IsFinite(item.zOrder) || !IsFinite(item.cornerRadius) || !IsFinite(item.layout.resolvedSize) ||
         !IsFinite(item.layout.resolvedPosition)) return false;
     for (float uv : item.uvRect) {
         if (!IsFinite(uv)) return false;
@@ -181,10 +181,11 @@ FramePacket RenderExtractor::Build(
 
         std::copy(std::begin(item->uvRect), std::end(item->uvRect), std::begin(instance.uvRect));
 
-        instance.tint[0] = item->tintPremultipliedLinear.x;
-        instance.tint[1] = item->tintPremultipliedLinear.y;
-        instance.tint[2] = item->tintPremultipliedLinear.z;
-        instance.tint[3] = item->tintPremultipliedLinear.w;
+        const Vec4 tint = item->tintPremultipliedLinear * Clamp01(item->opacity);
+        instance.tint[0] = tint.x;
+        instance.tint[1] = tint.y;
+        instance.tint[2] = tint.z;
+        instance.tint[3] = tint.w;
 
         instance.resourceIds[0] = item->textureSlice;
         instance.resourceIds[1] = item->materialIndex;

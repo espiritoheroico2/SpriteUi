@@ -3,10 +3,13 @@
 #include "TestHarness.hpp"
 #include "TestSuites.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -83,6 +86,83 @@ void TestInputRouterClickAndCapture() {
     for (const auto& event : upEvents) clicked |= event.type == UIEventType::Click;
     CHECK(clicked);
     CHECK(!router.GetState().capturedEntity.IsValid());
+}
+
+void TestMultiPointerRouter() {
+    using namespace ToolEngine::SpriteUi::Input;
+
+    std::vector<HitTarget> targets(2);
+    targets[0].handle = {80, 1};
+    targets[0].localSize = {100, 100};
+    targets[0].localToScreen.tx = 0.0f;
+    targets[0].localToScreen.ty = 0.0f;
+    targets[0].paintOrder = 1;
+    targets[1].handle = {81, 1};
+    targets[1].localSize = {100, 100};
+    targets[1].localToScreen.tx = 100.0f;
+    targets[1].localToScreen.ty = 0.0f;
+    targets[1].paintOrder = 2;
+
+    UIMultiPointerEventRouter router;
+    std::array<UIInputSnapshot, 2> down{};
+    down[0].pointerId = 101;
+    down[0].pointerPositionLogical = {20, 20};
+    down[0].primaryDown = true;
+    down[0].primaryPressed = true;
+    down[0].frameId = 1;
+    down[1].pointerId = 202;
+    down[1].pointerPositionLogical = {120, 20};
+    down[1].primaryDown = true;
+    down[1].primaryPressed = true;
+    down[1].frameId = 1;
+    auto result = router.ProcessFrame(1, down, targets);
+    CHECK(result.valid);
+    CHECK(router.PointerCount() == 2);
+    CHECK(router.GetState(101) != nullptr);
+    CHECK(router.GetState(101)->capturedEntity == targets[0].handle);
+    CHECK(router.GetState(202)->capturedEntity == targets[1].handle);
+
+    std::array<UIInputSnapshot, 2> up = down;
+    for (UIInputSnapshot& input : up) {
+        input.frameId = 2;
+        input.primaryDown = false;
+        input.primaryPressed = false;
+        input.primaryReleased = true;
+    }
+    result = router.ProcessFrame(2, up, targets);
+    CHECK(result.valid);
+    CHECK(std::count_if(result.events.begin(), result.events.end(),
+        [](const UIEvent& event) { return event.type == UIEventType::Click; }) == 2);
+    CHECK(std::any_of(result.events.begin(), result.events.end(), [&](const UIEvent& event) {
+        return event.type == UIEventType::Click && event.pointerId == 101 &&
+               event.target == targets[0].handle;
+    }));
+    CHECK(std::any_of(result.events.begin(), result.events.end(), [&](const UIEvent& event) {
+        return event.type == UIEventType::Click && event.pointerId == 202 &&
+               event.target == targets[1].handle;
+    }));
+
+    up[0].frameId = 3;
+    result = router.ProcessFrame(3, std::span<const UIInputSnapshot>(up.data(), 1), targets);
+    CHECK(result.valid);
+    CHECK(router.PointerCount() == 1);
+    CHECK(router.GetState(202) == nullptr);
+    CHECK(std::any_of(result.events.begin(), result.events.end(), [](const UIEvent& event) {
+        return event.type == UIEventType::PointerLeave && event.pointerId == 202;
+    }));
+
+    result = router.ProcessFrame(4, std::span<const UIInputSnapshot>{}, targets);
+    CHECK(result.valid);
+    CHECK(router.PointerCount() == 0);
+
+    std::array<UIInputSnapshot, 2> duplicate{};
+    duplicate[0].pointerId = duplicate[1].pointerId = 9;
+    duplicate[0].frameId = duplicate[1].frameId = 5;
+    result = router.ProcessFrame(5, duplicate, targets);
+    CHECK(!result.valid);
+    CHECK(router.PointerCount() == 0);
+    router.Reset();
+    CHECK(router.PointerCount() == 0);
 }
 
 void TestInputRouterCancelAndOcclusion() {
@@ -359,6 +439,11 @@ void TestReviewRegressions() {
         UILayoutRect rect{{0, 0}, {100, 20}, true, false};
         const auto items = GenerateTextRenderItems(layout, rect, {1, 1, 1, 1}, 1, NoClipIndex, 0.0f, 0, UIHandle{7, 1});
         CHECK(RenderExtractor{}.Build(1, items).instances.size() == 1);
+        CHECK(items[0].flags == Rendering::FlagMsdfText);
+        const auto bitmapItems = GenerateTextRenderItems(
+            layout, rect, {1, 1, 1, 1}, 1, NoClipIndex, 0.0f, 0,
+            UIHandle{7, 1}, Rendering::FlagBitmapText);
+        CHECK(bitmapItems[0].flags == Rendering::FlagBitmapText);
     }
     // Bindings disparam na primeira leitura, mesmo com valores "sentinela" antigos.
     {
@@ -531,6 +616,53 @@ void TestToonMotion() {
     CHECK(Near(shakeEnd.y, 0.0f));
 }
 
+void TestToonTimeline() {
+    using namespace ToolEngine::SpriteUi::Animation;
+
+    ToonTimeline timeline;
+    TimelineTrack opacity;
+    opacity.target = {70, 1};
+    opacity.property = TweenProperty::Opacity;
+    opacity.keyframes = {
+        {0.0f, {0.0f, 0, 0, 0}, Easing::SmoothStep},
+        {2.0f, {1.0f, 0, 0, 0}, Easing::Linear}
+    };
+    CHECK(timeline.AddTrack(opacity));
+    CHECK(timeline.TrackCount() == 1);
+    CHECK(Near(timeline.Duration(), 2.0f));
+    auto samples = timeline.Sample(-1.0f);
+    CHECK(samples.size() == 1);
+    CHECK(Near(samples[0].value.x, 0.0f));
+    samples = timeline.Sample(1.0f);
+    CHECK(samples.size() == 1);
+    CHECK(Near(samples[0].value.x, 0.5f));
+    samples = timeline.Sample(1.5f);
+    CHECK(Near(samples[0].value.x, 0.84375f));
+    samples = timeline.Sample(3.0f);
+    CHECK(Near(samples[0].value.x, 1.0f));
+    CHECK(timeline.Sample(std::numeric_limits<float>::quiet_NaN()).empty());
+    CHECK(!timeline.AddTrack(opacity));
+
+    TimelineTrack invalid = opacity;
+    invalid.property = TweenProperty::Position;
+    invalid.keyframes[1].time = invalid.keyframes[0].time;
+    CHECK(!timeline.AddTrack(invalid));
+    invalid.keyframes = {{std::numeric_limits<float>::infinity(), {}, Easing::Linear}};
+    CHECK(!timeline.AddTrack(invalid));
+
+    TimelineTrack position;
+    position.target = {71, 1};
+    position.property = TweenProperty::Position;
+    position.keyframes = {{0.0f, {}, Easing::Linear},
+                          {3.0f, {10.0f, 4.0f, 0, 0}, Easing::Linear}};
+    CHECK(timeline.AddTrack(position));
+    CHECK(Near(timeline.Duration(), 3.0f));
+    CHECK(timeline.RemoveTrack(position.target, position.property));
+    CHECK(Near(timeline.Duration(), 2.0f));
+    CHECK(timeline.RemoveTrack(opacity.target, opacity.property));
+    CHECK(Near(timeline.Duration(), 0.0f));
+}
+
 void TestRendererAbiPremultiplicationAndBatching() {
     using namespace ToolEngine::SpriteUi::Rendering;
 
@@ -539,6 +671,40 @@ void TestRendererAbiPremultiplicationAndBatching() {
     CHECK(Near(tint.w, 0.5f));
     CHECK(Near(tint.x, 0.5f));
     CHECK(IsValidPremultipliedTint(tint));
+
+    UIIcon icon;
+    icon.textureSlice = 3;
+    icon.uvRect = {0.25f, 0.125f, 0.5f, 0.75f};
+    icon.sourceSize = {32.0f, 48.0f};
+    const auto iconItem = MakeIconRenderItem(
+        icon, {{12, 18}, {24, 36}}, tint, {30, 2}, NoClipIndex, 1.0f, 9);
+    CHECK(iconItem.has_value());
+    CHECK(iconItem->textureSlice == 3);
+    CHECK(Near(iconItem->uvRect[0], 0.25f));
+    CHECK(Near(iconItem->uvRect[3], 0.75f));
+    const FramePacket iconPacket = RenderExtractor{}.Build(42, {*iconItem});
+    CHECK(iconPacket.instances.size() == 1);
+    CHECK(iconPacket.instances[0].resourceIds[0] == 3);
+    CHECK(Near(iconPacket.instances[0].uvRect[1], 0.125f));
+    CHECK(!MakeIconRenderItem(icon, {{0, 0}, {0, 10}}, tint, {30, 2}).has_value());
+    icon.uvRect[0] = 0.75f;
+    CHECK(!icon.IsValid());
+
+    UIRenderItem faded;
+    faded.handle = {31, 1};
+    faded.layout = {{0, 0}, {10, 10}, true, false};
+    faded.tintPremultipliedLinear = tint;
+    faded.opacity = 0.25f;
+    const FramePacket fadedPacket = RenderExtractor{}.Build(43, {faded});
+    CHECK(fadedPacket.instances.size() == 1);
+    CHECK(Near(fadedPacket.instances[0].tint[0], tint.x * 0.25f));
+    CHECK(Near(fadedPacket.instances[0].tint[3], tint.w * 0.25f));
+    faded.opacity = 1.5f;
+    const FramePacket clampedOpacityPacket = RenderExtractor{}.Build(43, {faded});
+    CHECK(Near(clampedOpacityPacket.instances[0].tint[0], tint.x));
+    CHECK(Near(clampedOpacityPacket.instances[0].tint[3], tint.w));
+    faded.opacity = std::numeric_limits<float>::quiet_NaN();
+    CHECK(RenderExtractor{}.Build(43, {faded}).instances.empty());
 
     std::vector<UIRenderItem> items(3);
     for (std::size_t i = 0; i < items.size(); ++i) {
@@ -1127,6 +1293,7 @@ int main() {
     TestLayoutTreeAndAlignment();
     TestAnchorsAndTransforms();
     TestInputRouterClickAndCapture();
+    TestMultiPointerRouter();
     TestInputRouterCancelAndOcclusion();
     TestHoverMoveEvent();
     TestInvalidInputCancelsCapture();
@@ -1138,6 +1305,7 @@ int main() {
     TestCanvasConfig();
     TestWidgets();
     TestToonMotion();
+    TestToonTimeline();
     TestTweenConflictPolicies();
     TestRendererAbiPremultiplicationAndBatching();
     TestFontMetricsAndTextLayout();
@@ -1167,5 +1335,3 @@ int main() {
     std::cout << "All " << testsRun << " checks passed.\n";
     return EXIT_SUCCESS;
 }
-
-

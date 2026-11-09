@@ -87,12 +87,23 @@ float4 PSMain(VSOutput input) : SV_TARGET
         const float3 msd = SpriteTextures.Sample(
             SpriteSampler, float3(input.uv, input.resourceIds.x)).rgb;
         const float sd = Median(msd.r, msd.g, msd.b) - 0.5;
-        // Screen pixel distance derived from UV derivatives
-        // pxRange vem do cbuffer (V4.2 sec. 4): amplitude em px / derivada real do UV.
-        const float2 unitRange = float2(MsdfPxRange, MsdfPxRange) / max(fwidth(input.uv), float2(1e-5, 1e-5));
-        const float screenPxDistance = sd * 0.5 * (unitRange.x + unitRange.y);
+        uint atlasWidth;
+        uint atlasHeight;
+        uint arraySize;
+        uint mipLevels;
+        SpriteTextures.GetDimensions(0, atlasWidth, atlasHeight, arraySize, mipLevels);
+        const float2 unitRange = float2(MsdfPxRange, MsdfPxRange) / float2(atlasWidth, atlasHeight);
+        const float2 screenTexSize = rcp(max(fwidth(input.uv), float2(1e-5, 1e-5)));
+        const float screenPxRange = max(0.5 * dot(unitRange, screenTexSize), 1.0);
+        const float screenPxDistance = sd * screenPxRange;
         const float textAlpha = clamp(screenPxDistance + 0.5, 0.0, 1.0);
         color *= textAlpha;
+    }
+    else if ((flags & 0x8u) != 0u) // Flag_BitmapText: grayscale coverage in the red channel.
+    {
+        const float coverage = SpriteTextures.Sample(
+            SpriteSampler, float3(input.uv, input.resourceIds.x)).r;
+        color *= coverage;
     }
     else
     {

@@ -2,9 +2,11 @@
 
 **Versão CMake:** 0.6.0 — núcleo C++20 (layout, input, widgets, docking, texto, config). A versão ainda não implica uma release publicada. Estado atual: `docs/IMPLEMENTATION_STATUS.md`; checklist de release: `docs/RELEASE_CHECKLIST.md`.
 
-SpriteUI é o início executável de uma biblioteca de interface 2D orientada a dados. O núcleo matemático, input, widgets lógicos, animação e extração de comandos são independentes de ECS e de API gráfica, para que Flecs e Diligent possam ser integrados por adaptadores sem contaminar os contratos públicos.
+SpriteUI é o início executável de uma biblioteca de interface 2D orientada a dados. O núcleo matemático, input, widgets lógicos, animação e extração de comandos são independentes de ECS e de API gráfica. Na ToolEngine, a integração pretendida é com o ECS e o RHI próprios da engine; Flecs e um backend Diligent paralelo não são requisitos do core.
 
-> Importante: esta entrega ainda não é uma GUI com janela visível. O backend incluído é `NullRenderBackend`, usado para validar pacotes e o fluxo CPU. O shader compila para DXIL, mas backend Diligent, integração Flecs, submissão a GPU real e shaping de fontes de produção ainda são etapas futuras.
+SpriteUI não depende de Dear ImGui. A remoção do ImGui do editor da ToolEngine é um objetivo de integração separado e ainda não concluído; o caminho planejado é migrar as telas gradualmente e remover a dependência do host somente depois de validar a substituição.
+
+> Importante: o core não cria uma janela nem possui backend de produção. O visualizador SDL3 opcional demonstra uma cena em CPU; a integração com o RHI da ToolEngine, submissão a GPU real e shaping de fontes de produção ainda são etapas futuras.
 
 ## Funcionalidades implementadas
 
@@ -15,13 +17,16 @@ SpriteUI é o início executável de uma biblioteca de interface 2D orientada a 
 - Transformação local em pixels para hit-testing coerente com o tamanho lógico do widget.
 - Handles com índice + geração para evitar referências recicladas.
 - Roteamento de input com hover, foco, captura, click, wheel, move e cancelamento por perda de foco.
+- Roteamento core multi-pointer com estados independentes por ponteiro e cancelamento de ponteiros ausentes por frame.
 - Propagação de eventos pelos ancestrais (`HitTarget::parent`) e consumo de input por alvo/ancestral.
 - Navegação espacial por teclado/gamepad e eventos semânticos `Activate`/`Cancel`.
 - Slider com clamp, domínio, passo opcional e proteção contra largura zero.
 - ScrollView com limites `contentSize - viewportSize`.
 - ToonMotion básico com easing, `Override`/`Queue`/`Ignore`, pausa/cancelamento e shake sem drift.
+- Amostragem stateless de tracks de animação por keyframes em `Animation::ToonTimeline`; relógio, looping e aplicação em ECS continuam a cargo do host.
 - Flags de invalidação por subsistema.
 - Extração de instâncias, ordenação visual e batching apenas entre comandos consecutivos compatíveis.
+- Referência de ícone em atlas por slice/UV/tamanho de origem (`Rendering::UIIcon`) e opacidade animável por item, sem alterar a ABI GPU.
 - Árvore de layout com relações explícitas, remoção recursiva segura e validação de parent handles.
 - Alinhamento transversal de itens (Stretch/Start/Center/End).
 - Flex wrap, alinhamento de conteúdo e alinhamento por baseline em linhas.
@@ -37,19 +42,21 @@ SpriteUI é o início executável de uma biblioteca de interface 2D orientada a 
 | Módulo | Estado |
 |---|---|
 | Flexbox | Wrap, `alignContent`, baseline, `justifyContent` e grow/shrink com limites implementados; não cobre toda a especificação CSS |
-| Flecs ECS adapter | Pendente |
-| Diligent Engine backend, buffers reais e fences | Pendente |
-| SDL3 | Adaptador opcional de mouse/foco implementado; janela, clipboard, IME e input multi-pointer pendentes |
+| Adaptador para o ECS próprio da ToolEngine | Pendente; não adicionar Flecs para essa integração |
+| Backend via RHI da ToolEngine, buffers reais e sincronização | Pendente; a interface atual do RHI precisa expor capacidades usadas pelo shader SpriteUI |
+| SDL3 | Wrapper opcional, mouse/foco, navegação por teclado/gamepad, entrada de texto/IME e clipboard; o adaptador SDL3 ainda não converte eventos touch/finger em snapshots |
 | GLFW | Pendente |
 | Widgets visuais (desenho), drag & drop de docking | Pendente (lógica de widgets, janelas, abas e dock tree implementada) |
 | HarfBuzz, FreeType e atlas MSDF de produção | Pendente (layout geométrico, caret e quebra de linha por palavra no subconjunto implementado) |
-| ToonMotion timeline/keyframes e integração ECS | Pendente |
+| Playback/looping de timeline, editor de keyframes e integração ECS | Pendente; a amostragem stateless de keyframes está implementada |
 | KTX2/Basis, streaming e eviction por fences | Pendente |
 | Light Prism ClusterLit, Bloom, Acrylic Blur e sombras | Pendente |
 | Partículas e nodes de editor | Pendente |
 | QuickJS sandbox e FFI | Pendente |
 
 O estado completo e os limites verificados estão em `docs/IMPLEMENTATION_STATUS.md`. Os documentos de arquitetura descrevem também funcionalidades planejadas; consulte neles as seções de estado antes de tratar uma integração como concluída.
+
+Referência dos módulos e fluxo público: [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md). A geração HTML por Doxygen é opcional (`SPRITEUI_BUILD_DOCS=ON`) e requer Doxygen instalado.
 
 ## Início rápido
 
@@ -79,28 +86,80 @@ int main() {
 
 O exemplo não cria nem desenha uma janela. Para compilar um consumidor instalado, veja o teste `tests/package_consumer` e as instruções de build abaixo.
 
+### Visualizador interativo (SDL3, rasterização de referência em CPU)
+
+Para experimentar cores, painéis arredondados, clipping, estados de interação e a fonte Xmind numa janela, habilite o visualizador opcional:
+
+```sh
+cmake -S . -B build-visual -DSPRITEUI_BUILD_VISUALIZER=ON
+cmake --build build-visual --target spriteui_visualizer
+./build-visual/spriteui_visualizer
+```
+
+É necessário SDL **3.2+** com pacote CMake `SDL3`. No Windows, execute `build-visual\Debug\spriteui_visualizer.exe` (ou `Release`, conforme a configuração). O visualizador reutiliza o `RenderExtractor` e o rasterizador por software usado pelos testes; clique em **CYCLE PALETTE**, alterne o toggle e arraste o slider. Para manter a interação responsiva, a janela renderiza a prévia em metade da resolução e amplia a imagem; pressione **S** para salvar um PNG em resolução integral em `snapshots/` (ou no diretório definido por `SPRITEUI_SNAPSHOT_DIR`). Para gerar uma captura padrão sem abrir uma janela, execute `spriteui_visualizer --headless`; o PNG `spriteui_visualizer_preview.png` será salvo no diretório de snapshots. O CTest exercita esse modo sempre que o visualizador e os testes estão habilitados.
+
+O visualizador carrega `Fonts/Xmind/static/Xmind-Regular.ttf` e `fotos/LOGO.png` por padrão. O logo aparece em um cartão de anúncio e passa pelo `UIIcon`, extração de draw-list e amostragem da textura pelo rasterizador CPU. Os arquivos são carregados pelo Windows Imaging Component (PNG) e GDI (fonte), sem acrescentar dependências ao core. O CTest headless verifica texto antialiasado e pixels visíveis da imagem. Use `--image <PNG-path>` para selecionar outra imagem compatível. A cena também demonstra estilos tipográficos predefinidos (`Title`, `Subtitle`, `Body`, `Label`, `Caption`, `Metric` e `Footer`), abas clicáveis, aba ativa com gradiente horizontal de duas cores, botões flutuantes e fade do botão de ação via `ToonMotionSystem`. Para outra fonte TrueType/OpenType, use `--font "C:\fonts\MinhaFonte-Bold.ttf"`. O asset Xmind é distribuído sob a SIL Open Font License, incluída em `Fonts/Xmind/OFL.txt`. O carregador de fontes/imagens do visualizador atualmente usa APIs Windows.
+
+**Limite importante:** esta janela não usa a GPU e não representa a qualidade final de fontes ou texturas. No Windows, o visualizador rasteriza glifos Latin-1 com GDI para um atlas de cobertura em tons de cinza; esse caminho não executa shaping complexo, kerning, bidi, texto colorido ou MSDF. O gradiente usa uma textura sintética do harness; não adiciona um tipo de gradiente ao ABI de produção. `UIIcon` referencia regiões de atlas existentes, mas o core não decodifica SVG/PNG: a importação/rasterização e o lifetime do atlas pertencem ao pipeline de assets do host.
+
 ### Adaptador opcional SDL3
 
-O adaptador conecta eventos SDL3 de mouse/foco ao `UIInputSnapshot`; ele não cria janelas nem escolhe uma API gráfica. O core continua sem dependências SDL3.
+O target opcional `SpriteUi::SDL3Input` fornece um wrapper de ciclo de vida/configuração básica de janela, conecta eventos SDL3 de mouse/foco ao `UIInputSnapshot`, converte teclado/gamepad em comandos semânticos de navegação e expõe entrada de texto/IME e clipboard. Não escolhe uma API gráfica. O core `SpriteUi::SpriteUI` continua sem dependências SDL3.
 
 ```sh
 cmake -S . -B build-sdl -DSPRITEUI_BUILD_SDL3_ADAPTER=ON
 cmake --build build-sdl --parallel
 ```
 
-É necessário SDL **3.2+** instalado com o pacote CMake `SDL3`. Depois de inicializar SDL e criar uma janela, encaminhe cada evento recebido e consuma um snapshot por frame:
+É necessário SDL **3.2+** instalado com o pacote CMake `SDL3`. A aplicação hospedeira inicializa SDL; dentro da rotina de inicialização, pode criar uma janela pelo wrapper e encaminhar cada evento:
 
 ```cpp
-Platform::SDL3InputAdapter platformInput(window);
+Platform::SDL3WindowConfig windowConfig;
+windowConfig.title = "My SpriteUI application";
+windowConfig.flags = SDL_WINDOW_RESIZABLE;
+std::string windowError;
+auto window = Platform::SDL3Window::Create(windowConfig, windowError);
+if (!window) {
+    // Report windowError through the host application's error path.
+    return;
+}
+
+Platform::SDL3InputAdapter platformInput(window->GetNativeHandle());
 SDL_Event event;
 while (SDL_PollEvent(&event)) {
     platformInput.ProcessEvent(event);
 }
 const auto snapshot = platformInput.BuildSnapshot(frameId);
 const auto uiEvents = eventRouter.Process(snapshot, hitTargets);
+const auto navigationEvents = navigationRouter.Process(
+    platformInput.ConsumeNavigationCommand(), focusCandidates);
+
+if (textFieldFocused) {
+    if (!platformInput.SetTextInputActive(true)) {
+        // Report SDL_GetError() through the host application's error path.
+    }
+    if (!platformInput.SetTextInputArea(caretX, caretY, caretWidth, caretHeight, caretOffset)) {
+        // Report SDL_GetError() through the host application's error path.
+    }
+} else {
+    if (!platformInput.SetTextInputActive(false)) {
+        // Report SDL_GetError() through the host application's error path.
+    }
+}
+const std::string committed = platformInput.ConsumeCommittedText();
+const auto& composition = platformInput.GetTextComposition();
+// Forward committed and composition text/range to the focused text widget.
+
+if (!Platform::SDL3InputAdapter::SetClipboardText(committed)) {
+    // Report SDL_GetError() through the host application's error path.
+}
+std::string clipboardText;
+if (Platform::SDL3InputAdapter::GetClipboardText(clipboardText)) {
+    // Paste clipboardText into the focused widget.
+}
 ```
 
-O adaptador deve ser criado e usado na thread principal de SDL, a janela deve permanecer viva enquanto ele for usado, e eventos de outras janelas são ignorados. O target de integração é `SpriteUi::SDL3Input`; para usá-lo, inclua `<SDL3/SDL.h>` antes ou depois do header umbrella e faça `find_package(SDL3 3.2 CONFIG REQUIRED)`.
+O comando de navegação é consumido uma vez por chamada; se vários comandos chegarem antes do consumo, o primeiro é preservado. Teclas repetidas são tratadas, mas não repetem ações. `ConsumeCommittedText()` retorna o texto UTF-8 confirmado desde a última leitura; `GetTextComposition()` fornece o texto de composição IME ativo e seu intervalo de seleção, copiados do evento SDL. O retângulo da área IME usa coordenadas da janela SDL e deve acompanhar o caret. Clipboard é global ao processo/ambiente SDL: `SetClipboardText`, `GetClipboardText` e `HasClipboardText` são estáticos e devem ser chamados na thread principal. As operações retornam `false` em caso de falha; quando a falha vier do SDL, consulte `SDL_GetError()` imediatamente. A escrita rejeita NUL embutido porque a API SDL recebe uma string terminada em NUL. Eventos de teclado/texto de outras janelas são ignorados. Como eventos de gamepad não identificam uma janela, eles são encaminhados somente enquanto a janela associada ao adaptador estiver focada. Os métodos SDL, incluindo criação/destruição e operações de janela, devem ser usados na thread principal. O wrapper possui a janela e a destrói no destrutor; não inicializa nem encerra o subsistema SDL. A aplicação hospedeira continua responsável por `SDL_Init`/`SDL_Quit`. O target de integração é `SpriteUi::SDL3Input`; faça `find_package(SDL3 3.2 CONFIG REQUIRED)` e inclua `<SDL3/SDL.h>` para constantes SDL.
 
 ## Capturas de referência
 
@@ -193,12 +252,30 @@ if (localToScreen) {
 
 ## Integração pretendida com uma engine
 
-1. O ECS (por exemplo, Flecs) mantém componentes e entidades persistentes.
-2. Um adaptador gera `UIRenderItem` e `HitTarget` a partir dos componentes alterados.
+Na ToolEngine, a integração deve reutilizar o ECS, a janela/input e o RHI já existentes. Não se deve inicializar uma segunda janela SDL3 nem duplicar o bombeamento de eventos; o adaptador de janela SDL3 do SpriteUI é para hosts independentes, não para substituir `tool::IWindow`.
+
+O guia incremental e os critérios de aceite estão em [`docs/TOOLENGINE_INTEGRATION_GUIDE.md`](docs/TOOLENGINE_INTEGRATION_GUIDE.md). Ele não substitui a inspeção do checkout real da ToolEngine: o adaptador ECS, o event tap e o backend RHI permanecem pendentes.
+
+Há dois contratos do host que precisam ser ligados sem concorrer com a infraestrutura existente:
+
+- **Input:** `SdlWindow::pump` já consome a fila SDL. O adaptador SpriteUI pode receber os mesmos `SDL_Event` por um event tap do host, ou o host pode construir `UIInputSnapshot`; não se deve chamar um segundo `SDL_PollEvent`. O `RawInput` atual não carrega posição absoluta do mouse nem texto/IME, então essas informações precisam vir do event tap ou de uma extensão explícita do input da engine.
+- **Renderização:** `FramePacket` e `SpriteInstanceGPU` são a fronteira estável do SpriteUI. O futuro backend deve enviar o pacote através de `tool::rhi::IDevice`/`ICommandList`, sem assumir acesso a objetos privados do Diligent. Na interface atual do RHI, `TextureDesc` não declara camadas de textura, `PipelineDesc::textureNames` descreve `Texture2D` sem sampler, e o buffer estruturado documentado é de leitura no pixel shader; o shader SpriteUI usa `Texture2DArray` com sampler e lê instâncias estruturadas no vertex shader. Também não há parâmetro de base-instance em `drawIndexed`. Portanto, o RHI precisa ganhar capacidades equivalentes (ou o backend/shader deve adotar uma estratégia suportada) antes de prometer renderização SpriteUI eficiente e correta. Não contornar essas lacunas com um segundo backend Diligent paralelo.
+
+A migração do editor seguirá etapas reversíveis:
+
+1. Implementar e validar o backend de renderização necessário para o RHI da ToolEngine e adaptar o input do host sem alterar as telas existentes.
+2. Substituir primeiro uma tela isolada de baixo risco (Console), mantendo o ImGui nas telas ainda não migradas.
+3. Comparar interação, layout e capturas de referência; manter a tela antiga como fallback até os testes da nova passarem.
+4. Migrar as demais telas uma por vez. Remover código, targets e dependências do ImGui somente quando nenhuma tela do editor depender dele e os testes de regressão estiverem verdes.
+
+O ImGui é, portanto, apenas uma ponte temporária no editor durante a migração — não uma dependência do SpriteUI nem parte da arquitetura final pretendida. A compatibilidade de cenas e do `UiCanvas` da ToolEngine deve ser preservada; SpriteUI não deve exigir Flecs, pois a engine mantém seu próprio ECS.
+
+1. O ECS próprio da ToolEngine mantém componentes e entidades persistentes; não há dependência de Flecs.
+2. Um adaptador gera `UIRenderItem` e `HitTarget` a partir dos componentes alterados, enquanto o host fornece um snapshot de input por quadro.
 3. O núcleo SpriteUI processa input, navegação, animação e extração.
 4. `RenderExtractor` cria um `FramePacket` ordenado; o validador garante que batches cobrem as instâncias sem lacunas/overlaps.
-5. Um backend Diligent futuro consome o `FramePacket`, mantém buffers/ring e não recicla memória GPU antes das fences.
-6. Light Prism é consultada apenas para Canvas `World` com `ClusterLit`; HUD Screen é `Unlit` por padrão.
+5. Um backend futuro consome o pacote através do RHI da ToolEngine e respeita a vida útil/sincronização de recursos GPU.
+6. Light Prism pode ser conectada apenas depois de definido e validado o contrato de iluminação de Canvas `World`; HUD Screen é `Unlit` por padrão.
 
 Não armazene ponteiros da RHI nos componentes ECS. Utilize handles com geração e um registry no backend.
 

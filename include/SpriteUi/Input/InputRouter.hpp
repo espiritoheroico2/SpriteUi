@@ -17,6 +17,7 @@ struct UIInputSnapshot {
     bool primaryDown = false;
     bool primaryPressed = false;
     bool primaryReleased = false;
+    bool pointerCancelled = false;
     bool windowFocused = true;
     std::uint64_t frameId = 0;
 };

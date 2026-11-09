@@ -5,10 +5,17 @@ Estado em **0.6.0**, sem release publicada. A versão declarada no CMake não é
 Legenda: ✅ feito **e verificado** neste ambiente · 🟡 feito, **não verificado** na toolchain alvo ·
 ⬜ pendente · ⛔ bloqueia a publicação.
 
-**Ambiente verificado nesta rodada:** Windows, MSVC 14.51, CMake/Ninja Debug e Release,
-`spriteui_check_headers`, CTest (core + pacote consumidor), exemplos CLI, DXC VS/PS e **727 checks**
-passando em Debug. O benchmark CPU também foi executado localmente nas duas configurações. O
-adaptador SDL3 e o pacote instalado passaram com SDL 3.2.30.
+**Ambiente verificado nesta rodada:** Windows, MSVC, CMake Debug, build de `spriteui_tests` e
+`spriteui_visualizer`, teste core (**744 checks**) e CTest (5/5, incluindo snapshot, SDL3 e pacote
+consumidor). O benchmark CPU também foi executado localmente nas duas configurações. O adaptador
+SDL3 e o pacote instalado passaram com SDL 3.2.30. Nesta continuação, os shaders VS/PS foram
+recompilados após a correção do cálculo de cobertura MSDF, e CTest passou (2/2).
+O adaptador SDL3 também passou os testes sintéticos de navegação por teclado/gamepad, texto/
+composição IME e clipboard UTF-8; o consumidor instalado compilou contra `SpriteUi::SDL3Input`
+(CTest 4/4). O wrapper de janela SDL3 passou os testes de criação, validação, tamanho, posição,
+visibilidade e transferência de ownership.
+Após os testes, os diretórios locais ignorados de build e snapshots foram removidos para reduzir
+o workspace (aprox. 312 MiB); os fontes e imagens de referência versionáveis foram preservados.
 **Não verificado nesta rodada:** Clang/GCC, sanitizers, CI remoto e qualquer GPU real.
 
 ---
@@ -30,13 +37,28 @@ adaptador SDL3 e o pacote instalado passaram com SDL 3.2.30.
 | ✅ | **Robustez**: fuzz do parser JSON (6.000 mutações + 2.000 aleatórias), clip hostil, extrator corrompido | `test_robustness.cpp`: nenhuma falha encontrada |
 | ✅ | **Regressão visual**: backend de software + PNG, 10 screenshots com asserção de pixels | `tests/Visual/`, `docs/img/` |
 | ✅ | Constantes de flags nomeadas (o código usava `0x2`) | `Rendering/RenderFlags.hpp` |
-| ✅ | Shader HLSL de referência | Compilado com DXC para VS/PS DXIL; execução e paridade em GPU continuam pendentes |
+| ✅ | Shader HLSL de referência | Compilado com DXC para VS/PS DXIL; conversão MSDF de `pxRange` do atlas para pixels de tela corrigida e compilada nesta rodada; execução e paridade em GPU continuam pendentes |
 | ✅ | Build CMake e alvo de headers públicos | Build Debug MSVC, `spriteui_check_headers` e CTest executados |
 | ✅ | Build de produção MSVC Release | Build Release, checagem de headers, CTest e package smoke test passaram |
 | ✅ | CI multiplataforma configurado | `.github/workflows/ci.yml`: MSVC, GCC, Clang, job ASan/UBSan e build do adaptador SDL3 com SDL 3.2.30; execução remota pendente |
 | ✅ | Smoke test de pacote instalado | CTest instala a biblioteca e compila consumidor independente via `find_package`; aprovado em MSVC Debug e Release |
 | ✅ | Benchmarks CPU básicos | Alvo opcional executado localmente em Debug e Release; baseline e budgets pendentes |
 | ✅ | Adaptador de input SDL3 opcional | Compilado com SDL 3.2.30; CTest (core + pacote consumidor) aprovado localmente |
+| ✅ | SDL3: navegação por teclado/gamepad | Teste sintético aprovado; setas, Enter/Space, Escape/Backspace, direcional e botões principais do gamepad mapeados; consumidor instalado valida `SpriteUi::SDL3Input` |
+| ✅ | SDL3: texto UTF-8 e composição IME | Eventos confirmados/composição copiados; área de candidatos configurável; ativação, foco e seleção testados em SDL 3.2.30 |
+| ✅ | SDL3: clipboard UTF-8 | Leitura/escrita, clipboard vazio, NUL embutido e preservação do conteúdo anterior testados localmente |
+| ✅ | SDL3: janela básica | Wrapper RAII com criação, título, tamanho, posição, visibilidade e move ownership testados no driver dummy |
+| ✅ | Visualizador visual SDL3 / captura CPU | `spriteui_visualizer` compilado; CTest `--headless` salva PNG; loop interativo iniciou sob SDL dummy; modo interativo oferece paleta, toggle, slider e tecla `S`; GPU e desktop real não cobertos |
+| ✅ | Fonte real no visualizador | Xmind Regular TTF é carregada em Windows, gera atlas de cobertura Latin-1 e aceita outras fontes TTF/OTF via `--font`; shaping avançado, GPU e toolchains não-Windows permanecem fora deste teste |
+| ✅ | Escala e espaçamento tipográfico do visualizador | Estilos nomeados de título, subtítulo, corpo, rótulo, legenda, métrica e rodapé aplicam tamanhos e margens verticais padronizados; captura headless revisada após ajustar a hierarquia da cena |
+| ✅ | Abas, gradiente demonstrativo e botões flutuantes | Build MSVC, CTest 5/5 e inspeção da captura headless aprovados; gradiente é textura sintética do harness, não suporte genérico de shader |
+| ✅ | Fade de botão com ToonMotion e opacidade em item | Tween `Opacity` conectado ao botão flutuante; extração testa alpha/RGB premultiplicados, clamp e rejeição de NaN |
+| ✅ | Referência de ícone em atlas | `UIIcon` valida slice/UV/tamanho e cria `UIRenderItem`; teste confere UV/slice no pacote; decodificação SVG/raster e upload pertencem ao pipeline da engine |
+| ✅ | Guia de integração ToolEngine | `docs/TOOLENGINE_INTEGRATION_GUIDE.md` cobre ownership, input, ECS, RHI, assets, migração gradual e aceite do MVP; interfaces concretas ainda exigem o checkout da engine |
+| 🟡 | Imagem de anúncio no visualizador | `fotos/LOGO.png` carregada por WIC, desenhada via `UIIcon`; build e teste headless verificam os pixels; Windows-only, não é decoder do core |
+| ✅ | Timeline stateless por keyframes | `ToonTimeline` valida keyframes, easing, limites temporais e duração; playback/loop e ECS permanecem no host |
+| ✅ | Roteamento multi-pointer no core | Snapshots multi-pointer, captura independente, rejeição de IDs duplicados e cancelamento de ponteiros ausentes cobertos por teste |
+| 🟡 | Referência de API / Doxygen | Página de referência e target opcional configurados; não foi possível gerar HTML, pois Doxygen não está instalado |
 
 ### Mudanças de comportamento: nenhuma quebra de API
 Todas as APIs existentes mantêm o comportamento; o executável reportou 727 checks aprovados. O que
@@ -99,7 +121,7 @@ poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCare
 - Painel SDF: referência para preenchimento arredondado; bordas, sombras e efeitos continuam pendentes.
 - Baseline: implementado em `Row`; em `Column` equivale a `Start`.
 - O backend de software dos testes **não** é o backend de produção: valida a matemática, não o driver.
-- O adaptador SDL3 limita-se a eventos de mouse/foco; criação da janela, teclado/gamepad, clipboard e IME não fazem parte deste primeiro passo.
+- O target SDL3 opcional cobre wrapper básico de janela, mouse/foco, navegação, texto UTF-8, composição IME e clipboard; input multi-pointer continua pendente.
 
 ## 6. Caminho crítico sugerido
 

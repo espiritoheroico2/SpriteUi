@@ -4,6 +4,7 @@
 #include "SpriteUi/Core/Math.hpp"
 #include "SpriteUi/Core/Transform2D.hpp"
 #include "SpriteUi/Rendering/DrawList.hpp"
+#include "SpriteUi/Rendering/RenderFlags.hpp"
 #include "SpriteUi/Text/FontMetrics.hpp"
 #include "SpriteUi/Text/GlyphInstance.hpp"
 
@@ -130,7 +131,7 @@ struct TextLayoutResult {
     std::uint32_t clipIndex = Rendering::NoClipIndex,
     float zOrder = 0.0f,
     std::uint64_t basePaintOrder = 0,
-    UIHandle owner = {}); // Handle valido e obrigatorio para o RenderExtractor aceitar os itens.
+    UIHandle owner = {}, // Handle valido e obrigatorio para o RenderExtractor aceitar os itens.
+    std::uint32_t renderFlags = Rendering::FlagMsdfText);
 
 } // namespace ToolEngine::SpriteUi::Text
-

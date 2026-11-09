@@ -5,10 +5,13 @@ option(SPRITEUI_BUILD_EXAMPLES "Build SpriteUI examples" ON)
 option(SPRITEUI_BUILD_TESTS "Build SpriteUI tests" ON)
 option(SPRITEUI_BUILD_BENCHMARKS "Build lightweight CPU benchmarks" OFF)
 option(SPRITEUI_BUILD_SDL3_ADAPTER "Build the optional SDL3 window-input adapter" OFF)
+option(SPRITEUI_BUILD_VISUALIZER "Build the interactive SDL3 CPU visualizer" OFF)
+option(SPRITEUI_BUILD_DOCS "Build the Doxygen API reference" OFF)
 option(SPRITEUI_ENABLE_WARNINGS "Enable strict compiler warnings" ON)
 
 add_library(SpriteUI
     src/Input/InputRouter.cpp
+    src/Input/MultiPointerRouter.cpp
     src/Input/SpatialNavigation.cpp
     src/Animation/ToonMotion.cpp
     src/Rendering/DrawList.cpp
@@ -28,10 +31,29 @@ add_library(SpriteUI
 )
 add_library(SpriteUi::SpriteUI ALIAS SpriteUI)
 
+if(SPRITEUI_BUILD_DOCS)
+    find_package(Doxygen REQUIRED)
+    set(DOXYGEN_GENERATE_HTML YES)
+    set(DOXYGEN_GENERATE_TREEVIEW YES)
+    set(DOXYGEN_EXTRACT_ALL YES)
+    set(DOXYGEN_WARN_AS_ERROR NO)
+    set(DOXYGEN_USE_MDFILE_AS_MAINPAGE "${CMAKE_CURRENT_SOURCE_DIR}/docs/API_REFERENCE.md")
+    set(DOXYGEN_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/docs")
+    doxygen_add_docs(spriteui_docs
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/API_REFERENCE.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/TOOLENGINE_INTEGRATION_GUIDE.md"
+        COMMENT "Generating SpriteUI API reference"
+    )
+endif()
+
 if(SPRITEUI_BUILD_SDL3_ADAPTER)
     find_package(SDL3 3.2 CONFIG REQUIRED COMPONENTS SDL3)
 
-    add_library(SpriteUI_SDL3Input src/Platform/SDL3InputAdapter.cpp)
+    add_library(SpriteUI_SDL3Input
+        src/Platform/SDL3InputAdapter.cpp
+        src/Platform/SDL3Window.cpp
+    )
     add_library(SpriteUi::SDL3Input ALIAS SpriteUI_SDL3Input)
     set_target_properties(SpriteUI_SDL3Input PROPERTIES EXPORT_NAME SDL3Input)
     target_compile_features(SpriteUI_SDL3Input PUBLIC cxx_std_20)
@@ -75,8 +97,82 @@ if(SPRITEUI_BUILD_EXAMPLES)
     target_link_libraries(spriteui_interaction_demo PRIVATE SpriteUi::SpriteUI)
 endif()
 
+if(SPRITEUI_BUILD_VISUALIZER)
+    if(NOT WIN32)
+        message(FATAL_ERROR "The visualizer's TTF/OTF font rasterizer currently requires Windows GDI.")
+    endif()
+    find_package(SDL3 3.2 CONFIG REQUIRED COMPONENTS SDL3)
+
+    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/Fonts/Xmind"
+        DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/Fonts")
+    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/fotos"
+        DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+
+    add_executable(spriteui_visualizer
+        examples/BitmapFont.cpp
+        examples/BitmapImage.cpp
+        examples/spriteui_visualizer.cpp
+    )
+    target_include_directories(spriteui_visualizer PRIVATE tests)
+    target_link_libraries(spriteui_visualizer PRIVATE SpriteUi::SpriteUI SDL3::SDL3)
+    if(WIN32)
+        target_link_libraries(spriteui_visualizer PRIVATE gdi32 ole32 windowscodecs)
+    endif()
+    add_custom_command(TARGET spriteui_visualizer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/Fonts/Xmind"
+            "$<TARGET_FILE_DIR:spriteui_visualizer>/Fonts/Xmind"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/fotos"
+            "$<TARGET_FILE_DIR:spriteui_visualizer>/fotos"
+        VERBATIM
+    )
+    if(SPRITEUI_ENABLE_WARNINGS)
+        if(MSVC)
+            target_compile_options(spriteui_visualizer PRIVATE /W4 /permissive-)
+        else()
+            target_compile_options(spriteui_visualizer PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+        endif()
+    endif()
+    if(WIN32)
+        add_custom_command(TARGET spriteui_visualizer POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:SDL3::SDL3>"
+                "$<TARGET_FILE_DIR:spriteui_visualizer>"
+            VERBATIM
+        )
+    endif()
+    if(SPRITEUI_BUILD_TESTS)
+        add_test(NAME SpriteUI.VisualizerSnapshot
+            COMMAND spriteui_visualizer --headless)
+        set_tests_properties(SpriteUI.VisualizerSnapshot PROPERTIES
+            ENVIRONMENT "SPRITEUI_SNAPSHOT_DIR=${CMAKE_CURRENT_BINARY_DIR}/visualizer-snapshots")
+    endif()
+endif()
+
 if(SPRITEUI_BUILD_TESTS)
     enable_testing()
+    if(SPRITEUI_BUILD_SDL3_ADAPTER)
+        add_executable(spriteui_sdl3_input_tests tests/sdl3_input_adapter_tests.cpp)
+        target_link_libraries(spriteui_sdl3_input_tests PRIVATE SpriteUi::SDL3Input)
+        if(WIN32)
+            add_custom_command(TARGET spriteui_sdl3_input_tests POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:SDL3::SDL3>"
+                    "$<TARGET_FILE_DIR:spriteui_sdl3_input_tests>"
+                VERBATIM
+            )
+        endif()
+        add_test(NAME SpriteUI.SDL3Input COMMAND spriteui_sdl3_input_tests)
+        set_tests_properties(SpriteUI.SDL3Input PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy")
+        add_test(NAME SpriteUI.SDL3Clipboard
+            COMMAND spriteui_sdl3_input_tests --clipboard)
+        set_tests_properties(SpriteUI.SDL3Clipboard PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            SKIP_RETURN_CODE 77)
+    endif()
+
     add_executable(spriteui_tests
         tests/test_main.cpp
         tests/test_graph_sampling.cpp
@@ -102,6 +198,7 @@ if(SPRITEUI_BUILD_TESTS)
             "-DPROJECT_BINARY_DIR=${CMAKE_BINARY_DIR}"
             "-DGENERATOR=${CMAKE_GENERATOR}"
             "-DDEPENDENCY_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
+            "-DPACKAGE_HAS_SDL3=${SPRITEUI_BUILD_SDL3_ADAPTER}"
             "-DGENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
             "-DGENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
             "-DCXX_COMPILER=${CMAKE_CXX_COMPILER}"

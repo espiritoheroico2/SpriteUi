@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace ToolEngine::SpriteUi::Animation {
 
@@ -150,6 +151,77 @@ bool ToonMotionSystem::SetPaused(std::uint64_t trackId, bool paused) noexcept {
 void ToonMotionSystem::CancelTarget(UIHandle target) noexcept {
     tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(),
         [&](const TweenTrack& track) { return track.target == target; }), tracks_.end());
+}
+
+bool ToonTimeline::AddTrack(TimelineTrack track) {
+    if (!track.target.IsValid() ||
+        static_cast<std::uint8_t>(track.property) >
+            static_cast<std::uint8_t>(TweenProperty::VisualOffset) ||
+        track.keyframes.empty() ||
+        std::any_of(tracks_.begin(), tracks_.end(), [&](const TimelineTrack& existing) {
+            return existing.target == track.target && existing.property == track.property;
+        })) {
+        return false;
+    }
+
+    float previousTime = -1.0f;
+    for (const TweenKeyframe& keyframe : track.keyframes) {
+        if (!IsFinite(keyframe.time) || keyframe.time < 0.0f ||
+            keyframe.time <= previousTime || !IsFinite(keyframe.value) ||
+            static_cast<std::uint8_t>(keyframe.easingToNext) >
+                static_cast<std::uint8_t>(Easing::SmoothStep)) {
+            return false;
+        }
+        previousTime = keyframe.time;
+    }
+
+    duration_ = std::max(duration_, track.keyframes.back().time);
+    tracks_.push_back(std::move(track));
+    return true;
+}
+
+bool ToonTimeline::RemoveTrack(UIHandle target, TweenProperty property) noexcept {
+    const auto it = std::find_if(tracks_.begin(), tracks_.end(),
+        [&](const TimelineTrack& track) {
+            return track.target == target && track.property == property;
+        });
+    if (it == tracks_.end()) return false;
+    tracks_.erase(it);
+    duration_ = 0.0f;
+    for (const TimelineTrack& track : tracks_) {
+        duration_ = std::max(duration_, track.keyframes.back().time);
+    }
+    return true;
+}
+
+std::vector<TimelineSample> ToonTimeline::Sample(float time) const {
+    std::vector<TimelineSample> samples;
+    if (!IsFinite(time)) return samples;
+    samples.reserve(tracks_.size());
+
+    for (const TimelineTrack& track : tracks_) {
+        const auto upper = std::upper_bound(
+            track.keyframes.begin(), track.keyframes.end(), time,
+            [](float value, const TweenKeyframe& keyframe) {
+                return value < keyframe.time;
+            });
+        if (upper == track.keyframes.begin()) {
+            samples.push_back({track.target, track.property, upper->value});
+            continue;
+        }
+        if (upper == track.keyframes.end()) {
+            samples.push_back({track.target, track.property, track.keyframes.back().value});
+            continue;
+        }
+
+        const TweenKeyframe& from = *(upper - 1);
+        const TweenKeyframe& to = *upper;
+        const float span = to.time - from.time;
+        const float progress = span > 0.0f ? (time - from.time) / span : 1.0f;
+        const float eased = EvaluateEasing(from.easingToNext, progress);
+        samples.push_back({track.target, track.property, Lerp(from.value, to.value, eased)});
+    }
+    return samples;
 }
 
 } // namespace ToolEngine::SpriteUi::Animation

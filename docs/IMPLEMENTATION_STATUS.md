@@ -16,7 +16,7 @@ O CMake declara a versão 0.6.0; isso não significa que uma release esteja publ
   - `UIMaterialGPU` base e configuração de Canvas Screen/World com validação do modo de iluminação.
   - Render extraction com ordenação visual estável, batches apenas consecutivos, clip rects e ABI de 80 bytes.
   - Validador de `FramePacket`; `NullRenderBackend` para execução e validação sem GPU.
-  - Shader HLSL (`SpriteUI.hlsl`) com amostragem MSDF por `fwidth` e compilação offline DXIL ativa.
+  - Shader HLSL (`SpriteUI.hlsl`) consulta dimensões do atlas para normalizar `pxRange` em pixels de tela e calcula cobertura MSDF a partir de `fwidth`; compilação DXIL ativa. Paridade visual em GPU real continua pendente.
 
 - **Layout e Cena:**
   - Flexbox com Row/Column, Fixed/Percent/Auto/Flex, grow/shrink, gap, padding, margens, min/max, `JustifyContent`, wrap, `AlignContent` e baseline.
@@ -42,7 +42,9 @@ O CMake declara a versão 0.6.0; isso não significa que uma release esteja publ
 
 - **Tipografia e Texto:**
   - `GlyphInstance`, `FontMetrics`, `LayoutText` (quads, quebra por palavra no subconjunto implementado, alinhamento), `GetCaretRect`, `FindInsertionOffset`, `FindClusterAtPosition` e `GenerateTextRenderItems`.
-  - HarfBuzz/FreeType, atlas de produção e bidi/RTL não estão integrados.
+  - `GenerateTextRenderItems` aceita flags de cobertura MSDF (padrão compatível) ou bitmap em tons de cinza; o shader e o rasterizador de referência CPU distinguem os dois modos.
+  - O visualizador opcional carrega Xmind Regular como fonte primária, gera um atlas Latin-1 de cobertura com métricas da fonte e aceita outro arquivo TTF/OTF por `--font`. Essa rasterização do visualizador usa GDI no Windows; não substitui HarfBuzz/FreeType, shaping complexo, bidi/RTL ou atlas MSDF de produção.
+  - HarfBuzz/FreeType e bidi/RTL não estão integrados ao core.
 - **Renderização auxiliar:** Nine-Slice e painéis SDF arredondados; compilação DXIL do shader verificada localmente, sem validação em GPU real.
 
 - **Persistência Segura (JSON):**
@@ -54,27 +56,41 @@ O CMake declara a versão 0.6.0; isso não significa que uma release esteja publ
   - DXC compilou os shaders VS/PS para DXIL.
   - Clang/GCC, sanitizers, CI e GPU real não foram verificados nesta rodada.
 - **Preparação para release adicionada:** workflow CI para MSVC/GCC/Clang e ASan/UBSan; teste CTest de instalação/consumidor `find_package`; benchmark CPU opcional de layout e render extraction. O smoke test de pacote e benchmark foram executados localmente; o workflow remoto ainda precisa executar com sucesso no GitHub Actions.
-- **Documentação de adoção:** README com quick start e screenshots de software; `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md` e notas de thread-safety adicionados. Referência de API e guia completo de integração ainda pendentes.
-- **Integração opcional SDL3:** adaptador de eventos de mouse/foco para `UIInputSnapshot`, selecionável por `SPRITEUI_BUILD_SDL3_ADAPTER`; compilado localmente com SDL 3.2.30, e CTest (core + pacote consumidor) passou. O workflow também ganhou um job com SDL 3.2.30 fixado; a execução remota ainda não foi confirmada.
+- **Documentação de adoção:** README com quick start e screenshots de software; `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, notas de thread-safety e `docs/TOOLENGINE_INTEGRATION_GUIDE.md` adicionados. O guia separa APIs existentes do SpriteUI de adaptadores que dependem do checkout da ToolEngine; referência de API continua pendente.
+- **Integração opcional SDL3:** wrapper de janela com ownership RAII e criação/configuração básica; adaptador de mouse/foco, navegação semântica por teclado/gamepad, entrada de texto/composição IME e clipboard UTF-8 global. Testes sintéticos, checagem de headers e smoke test do target instalado aprovados localmente com SDL 3.2.30. APIs SDL exigem thread principal; clipboard também requer suporte do backend. O workflow usa essa versão fixada; execução remota ainda não confirmada.
+- **Visualizador interativo opcional:** `spriteui_visualizer` mostra uma cena demonstrativa numa janela SDL3, usando `RenderExtractor` e o rasterizador CPU de referência já exercitado pelos testes. Usa Xmind Regular como fonte principal, aceita outra fonte TTF/OTF com `--font`, e aplica estilos de texto predefinidos com tamanhos e margens consistentes para título, subtítulo, corpo, rótulo, legenda, métrica e rodapé. Permite trocar paleta, ativar toggle, arrastar slider, selecionar abas, experimentar uma aba selecionada com gradiente horizontal de duas cores, ativar botões flutuantes e animar o fade de um botão via `ToonMotionSystem`; também salva PNG com `S`. `--headless` gera uma captura com abas e opacidade parcial do botão, e CTest verifica pixels de texto antialiasado. Build MSVC, CTest (5/5) e inspeção da captura foram aprovados nesta rodada. A fonte é rasterizada por GDI no Windows para um atlas Latin-1 em tons de cinza; isso verifica layout e cobertura bitmap, não shaping complexo, MSDF de produção ou GPU.
+- **Ícones e opacidade:** `Rendering::UIIcon` descreve tamanho de origem, slice e região UV normalizada de um asset já inserido num atlas; `MakeIconRenderItem` produz um quad renderizável. Testes validam UV/slice/bounds e extração de opacidade parcial, clamp e rejeição de NaN. Não há decodificação de SVG/PNG no core: rasterização/importação, atlas, DPI e lifetime de recursos permanecem no pipeline de assets/host. A opacidade escala tint RGB e alpha juntos durante extração, sem alterar a ABI GPU de 80 bytes.
+- **Imagem no visualizador:** `fotos/LOGO.png` é carregada por WIC e apresentada num cartão de anúncio através de `UIIcon` e do caminho real CPU de extração/renderização. `--image` permite apontar outro PNG; o teste headless confirma pixels claros na região do logo. WIC/GDI são dependências apenas do alvo opcional Windows, não do core.
+- **Timeline de keyframes:** `Animation::ToonTimeline` valida tracks e ordenação/valores dos keyframes e amostra `Vec4` com easing por segmento, com clamp antes/depois da faixa. Testes cobrem limites, easing, tempo não finito, tracks duplicados/inválidos e remoção/duração. Clock/playback, looping, editor visual, persistência e escrita no ECS permanecem responsabilidades do host.
+- **Input multi-pointer no core:** `Input::UIMultiPointerEventRouter` mantém hover/capture/foco por ponteiro, valida snapshots duplicados ou de frame inconsistente e cancela/limpa ponteiros ausentes de modo determinístico. O host fornece um snapshot por ponteiro ativo. Foco de teclado entre ponteiros requer política do host; o adaptador SDL3 ainda não traduz touch/finger para snapshots.
+- **Referência de API:** `docs/API_REFERENCE.md` documenta módulos, ciclo de frame, alpha, animação e limites. CMake disponibiliza alvo opcional `spriteui_docs` com Doxygen; o executável Doxygen não está instalado neste ambiente, então a geração HTML não foi validada.
+- **Independência de ImGui e ToolEngine:** o CMake, os headers e o código-fonte do SpriteUI não dependem de ImGui. A remoção do ImGui do editor da ToolEngine ainda não começou. A decisão é migrar uma tela por vez, começando pelo Console, com fallback temporário para telas não migradas; reutilizar o ECS, a janela/input SDL3 e o RHI existentes na engine; remover a dependência do ImGui do host somente após testes de paridade e regressão passarem.
+- **Limpeza do workspace:** removidos os diretórios locais ignorados `build`, `build-sdl3`, `build-release` e `snapshots`, incluindo o SDK SDL temporário e artefatos regeneráveis (aprox. 312 MiB). Nenhum arquivo versionado de fonte, teste, imagem ou documentação foi removido; `.cache/clangd` foi preservado.
+- **Varredura do shader MSDF:** corrigida a conversão de `FontMetrics::pxRange` (texels do atlas) para pixels de tela, que antes não considerava as dimensões da textura. Os shaders VS/PS recompilaram para DXIL e o CTest passou (2/2) após a correção.
 
 ## Pendências para integração e produção
 
 | Módulo | Estado |
 |---|---|
-| Flecs ECS adapter | Pendente |
-| Diligent Engine backend, submissão GPU, buffers e fences | Pendente |
-| Adaptador SDL3 para mouse/foco | Implementado e validado localmente com SDL 3.2.30; job CI remoto pendente |
-| Criação/gestão de janela, clipboard, IME, input multi-pointer e alternativa GLFW | Pendente |
+| Adaptador para ECS próprio da ToolEngine | Pendente; a integração não deve adicionar Flecs |
+| Backend de renderização via RHI da ToolEngine | Pendente; a interface atual não cobre diretamente todas as necessidades do shader/ABI SpriteUI (instâncias no vertex stage, textura-array/sampler e base-instance) |
+| Integração do editor ToolEngine sem dependência final de ImGui | Não iniciada; migração gradual planejada, com remoção do ImGui após paridade e regressão |
+| Adaptador SDL3 standalone: janela, mouse/foco, navegação teclado/gamepad, texto/IME e clipboard | Implementado e validado localmente com SDL 3.2.30; execução CI remota pendente; para ToolEngine, reutilizar `tool::IWindow` e encaminhar eventos/snapshot sem um segundo event loop |
+| Visualizador de qualidade de interface em janela | Abas selecionáveis, gradiente demonstrativo, botões flutuantes e fade via ToonMotion; build MSVC, CTest 5/5 e captura headless aprovados; desktop real/GPU fora do escopo |
+| Multi-pointer routing no core | Implementado e coberto por teste com dois ponteiros simultâneos, click, cancelamento e entrada inválida |
+| SDL3 touch/finger para snapshots multi-pointer e alternativa GLFW | Pendente |
 | HarfBuzz/FreeType, atlas MSDF dinâmico e suporte bidi/RTL | Pendente |
 | Widgets visuais integrados e drag-and-drop de docking | Pendente |
 | Light Prism ClusterLit, normal mapping, Acrylic Blur, Bloom e sombras | Pendente |
 | KTX2/Basis, streaming e eviction de recursos por fences | Pendente |
-| ToonMotion timeline/keyframes e integração ECS | Pendente |
+| Amostragem de timeline/keyframes | Implementada como `ToonTimeline` stateless; build/teste verificado nesta rodada |
+| Clock/playback/looping de timeline, editor visual e integração ECS | Pendente; exige política temporal e host |
 | Scheduler on-demand baseado em dirty flags e orçamento de desempenho em engine hospedeira | Pendente |
 | QuickJS sandbox/FFI, partículas e nodes de editor | Pendente |
 | CI configurado para MSVC/Clang/GCC e job ASan/UBSan | Implementado; falta observar execução remota em GitHub Actions |
 | Fuzz contínuo e cobertura | Pendente |
-| Referência de API (Doxygen) e guia de integração na engine | Pendente |
+| Referência de API | Página de entrada implementada em `docs/API_REFERENCE.md`; geração HTML opcional via Doxygen configurada, não verificada (Doxygen indisponível neste ambiente) |
+| Guia de integração na ToolEngine | Implementado em `docs/TOOLENGINE_INTEGRATION_GUIDE.md`; detalhes de APIs e adaptadores ainda dependem do checkout da ToolEngine |
 | Benchmarks CPU de layout e render extraction | Implementado como alvo opcional e executado localmente; faltam baseline comparável e orçamento por plataforma |
 | Teste de instalação/consumidor com `find_package` | Implementado como teste CTest e aprovado localmente em MSVC Debug e Release; falta validar em outras plataformas/toolchains |
 | Validação em GPU real | Pendente |

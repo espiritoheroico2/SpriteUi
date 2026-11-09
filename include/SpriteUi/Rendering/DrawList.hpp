@@ -19,6 +19,8 @@ struct UIRenderItem {
 
     float uvRect[4]{0.0f, 0.0f, 1.0f, 1.0f};
     Vec4 tintPremultipliedLinear{1.0f, 1.0f, 1.0f, 1.0f};
+    // Scalar opacity; extraction clamps finite values to [0, 1].
+    float opacity = 1.0f;
 
     std::uint32_t textureSlice = WhiteTextureSlice;
     std::uint32_t materialIndex = 0;

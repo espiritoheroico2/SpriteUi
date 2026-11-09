@@ -1,6 +1,6 @@
 # **SpriteUi & Light Prism: Arquitetura, Engenharia e Guia Didático Consolidado (V4.3)**
 
-Este documento descreve a arquitetura planejada para o subsistema **SpriteUi** e inclui explicações conceituais, diagramas e exemplos. Flecs e Diligent fazem parte da arquitetura-alvo, mas não estão integrados no core atual. Consulte a seção 8 para o estado do código e das verificações locais; exemplos de arquitetura não devem ser interpretados como funcionalidades já entregues.
+Este documento descreve a arquitetura planejada para o subsistema **SpriteUi** e inclui explicações conceituais, diagramas e exemplos. Partes do plano original usam Flecs e acesso direto ao Diligent; isso não corresponde à arquitetura da ToolEngine, que possui ECS e RHI próprios. Para a integração com a ToolEngine, usar os adaptadores desse host e não adicionar Flecs, uma segunda janela SDL ou um backend Diligent paralelo. Consulte a seção 8 para o estado do código e das verificações locais; exemplos de arquitetura não devem ser interpretados como funcionalidades já entregues.
 
 ## **Visão Geral para Iniciantes: O que é a SpriteUi?**
 
@@ -178,7 +178,7 @@ struct GlyphInstance {
 };
 ```
 
-No Pixel Shader, a amostragem MSDF combina `fwidth` e `pxRange` dinâmico enviado via cbuffer (FontMetrics::pxRange).
+No Pixel Shader, a amostragem MSDF combina `fwidth` e `pxRange` dinâmico enviado via cbuffer (`FontMetrics::pxRange`). O shader consulta as dimensões do atlas e converte o intervalo de texels para pixels de tela antes de calcular a cobertura.
 
 ## **Conceito: O que é MSDF (Multi-channel Signed Distance Fields)?**
 
@@ -201,7 +201,7 @@ Textura Atlas MSDF (Canais R, G, B) --> [ Amostragem de Distância ]
 ## **Código HLSL: Pixel Shader de Renderização MSDF (SpriteUI.hlsl)**
 
 ```
-// Trecho normativo do Pixel Shader para renderização de glifos MSDF nítidos
+// Trecho ilustrativo do cálculo usado em shaders/SpriteUI.hlsl
 Texture2DArray<float4> g_FontAtlas : register(t0);
 SamplerState           g_LinearSampler : register(s0);
 
@@ -213,18 +213,21 @@ float Median(float r, float g, float b) {
     return max(min(r, g), min(max(r, g), b));
 }
 
-float4 mainPS(float2 uv : TEXCOORD0, float3 atlasCoord : TEXCOORD1, float4 tint : COLOR0) : SV_Target {
-    // 1. Amostra os três canais de distância da textura de fontes
+float4 mainPS(float3 atlasCoord : TEXCOORD1, float4 tint : COLOR0) : SV_Target {
+    // Amostra os três canais de distância da textura de fontes
     float3 msd = g_FontAtlas.Sample(g_LinearSampler, atlasCoord).rgb;
-    // 2. Calcula a distância mediana para determinar a forma do glifo
-    float sd = Median(msd.r, msd.g, msd.b);
-    // 3. Converte a distância para espaço de tela usando o gradiente dinâmico fwidth
-    float screenPxDistance = g_pxRange * (sd - 0.5f);
-    float opacity = clamp(screenPxDistance / fwidth(screenPxDistance) + 0.5f, 0.0f, 1.0f);
-    // 4. Retorna a cor final multiplicada pela opacidade calculada
-    return float4(tint.rgb, tint.a * opacity);
+    float sd = Median(msd.r, msd.g, msd.b) - 0.5f;
+    uint atlasWidth, atlasHeight, arraySize, mipLevels;
+    g_FontAtlas.GetDimensions(0, atlasWidth, atlasHeight, arraySize, mipLevels);
+    float2 unitRange = g_pxRange / float2(atlasWidth, atlasHeight);
+    float2 screenTexSize = rcp(max(fwidth(atlasCoord.xy), float2(1e-5f, 1e-5f)));
+    float screenPxRange = max(0.5f * dot(unitRange, screenTexSize), 1.0f);
+    float opacity = saturate(screenPxRange * sd + 0.5f);
+    return tint * opacity; // tint is premultiplied linear RGBA
 }
 ```
+
+O exemplo resume a conversão usada pelo shader do projeto; `pxRange` está em texels do atlas, enquanto `fwidth` mede UV por pixel de tela. Portanto, o intervalo precisa ser normalizado pelas dimensões da textura antes de combiná-los.
 
 # **5\. Motor de Animação: ToonMotion V2**
 
@@ -291,7 +294,7 @@ O CMake declara a versão 0.6.0. O estado abaixo descreve o código presente; n�
 | Área | Estado |
 |---|---|
 | Backend de produção | `NullRenderBackend` existe; Diligent, GPU real, buffers/ring e fences pendentes. |
-| ECS e plataforma | Adaptador Flecs pendente; adaptador opcional SDL3 de mouse/foco implementado e validado com SDL 3.2.30. GLFW, criação de janela, clipboard, IME e multi-pointer pendentes. |
+| ECS e plataforma | Adaptador Flecs pendente; target SDL3 opcional com wrapper RAII de janela, mouse/foco, navegação por teclado/gamepad, texto/composição IME e clipboard implementado e validado. GLFW e multi-pointer pendentes. |
 | Widgets | Núcleo lógico implementado; camada visual integrada e drag-and-drop de docking pendentes. |
 | Tipografia | Layout de glifos shaped implementado; HarfBuzz/FreeType, atlas MSDF e bidi/RTL não integrados. |
 | Animação | ToonMotion básico implementado; timeline/keyframes e integração ECS pendentes. |
@@ -324,11 +327,11 @@ Substituição total do ImGui pela SpriteUi Retained (ECS \+ DOD), unificando re
 
 ## **Roadmap de Migração: Integração gradual da SpriteUi**
 
-A substituição do ImGui é um objetivo de produto, não uma capacidade já entregue. As fases abaixo distinguem o core existente das integrações necessárias:
+A substituição do ImGui é um objetivo de produto, não uma capacidade já entregue. O core SpriteUI não depende de ImGui. Na ToolEngine, a migração deve preservar o editor funcional durante o trabalho: usar o ECS, a janela/input SDL3 e o RHI já existentes, migrar uma tela por vez e manter o ImGui somente como fallback das telas ainda não substituídas. A primeira tela planejada é o Console. A dependência do ImGui só deve ser removida do host quando nenhuma tela a utilizar e os testes de paridade/regressão estiverem aprovados.
 
 * **Fase 1 — Core retido e ABI (implementada no core):** tipos, layout, árvore, scene bridge, extração e ABI verificada; não há conector Flecs.
 * **Fase 2 — Input e widgets lógicos (implementada no core):** roteador, foco/captura, navegação e lógica de widgets; falta camada de janela/OS e kit visual completo.
 * **Fase 3 — Texto e MSDF (parcial):** layout, quebra, caret e shader compilado; faltam HarfBuzz/FreeType, atlas dinâmico e validação de fontes reais/GPU.
-* **Fase 4 — Backend e plataforma (parcial):** adaptador SDL3 opcional de mouse/foco implementado; Diligent com buffers/fences, Flecs, GLFW, janela, clipboard e IME pendentes.
+* **Fase 4 — Backend e plataforma (parcial):** target SDL3 opcional para hosts independentes; na ToolEngine, reutilizar `tool::IWindow` e o event loop existente. O adaptador para o ECS/RHI próprios da ToolEngine, GLFW e input multi-pointer permanecem pendentes. O RHI atual precisa expor caminhos compatíveis para instâncias em vertex shader, texturas-array/samplers e offsets de instância (ou deve ser acordada outra estratégia de backend).
 * **Fase 5 — Iluminação e efeitos (pendente):** integração Light Prism, ClusterLit, normal mapping, blur, bloom e sombras.
-* **Fase 6 — Produção e migração de aplicação (pendente):** CI, benchmarks, validação multiplataforma/GPU, pacote de consumidor e integração em uma aplicação hospedeira antes de remover o ImGui.
+* **Fase 6 — Produção e migração de aplicação (pendente):** CI, benchmarks, validação multiplataforma/GPU e pacote de consumidor; integrar primeiro o backend ao RHI/input da ToolEngine, migrar o Console e depois as demais telas individualmente, validar paridade e só então remover código, targets e dependências de ImGui do editor.

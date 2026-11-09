@@ -44,6 +44,24 @@ struct TweenUpdate {
     std::vector<TweenCompleted> completed;
 };
 
+struct TweenKeyframe {
+    float time = 0.0f;
+    Vec4 value{};
+    Easing easingToNext = Easing::Linear;
+};
+
+struct TimelineTrack {
+    UIHandle target{};
+    TweenProperty property = TweenProperty::Position;
+    std::vector<TweenKeyframe> keyframes;
+};
+
+struct TimelineSample {
+    UIHandle target{};
+    TweenProperty property = TweenProperty::Position;
+    Vec4 value{};
+};
+
 // Aplica opacidade a uma cor ja pre-multiplicada (V4.2 sec. 5): RGB e A escalam juntos,
 // preservando as proporcoes RGB/A sem degradar cores emissivas.
 [[nodiscard]] inline Vec4 ApplyOpacityPremultiplied(Vec4 premultipliedTint, float opacity) noexcept {
@@ -68,6 +86,24 @@ private:
     [[nodiscard]] bool HasTrack(UIHandle target, TweenProperty property) const noexcept;
     std::vector<TweenTrack> tracks_;
     std::uint64_t nextId_ = 1;
+};
+
+// Stateless keyframe sampling; playback clocks and ECS property writes stay host-owned.
+class ToonTimeline {
+public:
+    [[nodiscard]] bool AddTrack(TimelineTrack track);
+    [[nodiscard]] bool RemoveTrack(UIHandle target, TweenProperty property) noexcept;
+    [[nodiscard]] std::vector<TimelineSample> Sample(float time) const;
+    [[nodiscard]] float Duration() const noexcept { return duration_; }
+    [[nodiscard]] std::size_t TrackCount() const noexcept { return tracks_.size(); }
+    void Clear() noexcept {
+        tracks_.clear();
+        duration_ = 0.0f;
+    }
+
+private:
+    std::vector<TimelineTrack> tracks_;
+    float duration_ = 0.0f;
 };
 
 } // namespace ToolEngine::SpriteUi::Animation

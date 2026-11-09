@@ -123,7 +123,7 @@ struct GlyphInstance {
 };
 ```
 
-No *Pixel Shader*, a amostragem de MSDF incorpora as derivadas reais do UV (fwidth) aliadas à amplitude em pixéis (pxRange), garantindo extremidades de texto perfeitamente nítidas independentemente do *zoom* da janela.
+No *Pixel Shader*, a amostragem MSDF usa `fwidth` e `pxRange`; este último, medido em texels do atlas, deve ser normalizado pelas dimensões da textura para calcular a distância em pixels de tela. O shader de referência foi corrigido e compilado localmente; paridade em GPU real continua pendente.
 
 ## **5\. Motor de Animação: ToonMotion V2**
 
@@ -303,7 +303,12 @@ O cálculo de penumbra e dispersão gaussiana simplificada é obtido diretamente
 * # **13\. Core Gráfico e Substituição Definitiva do ImGui**
 
 O objetivo central da **SpriteUi** não é apenas renderizar jogos, mas **substituir integralmente o ImGui** como a interface gráfica oficial da própria ToolEngine. O ImGui tradicional, embora excelente para debug, apresenta limitações de estilização e renderização de texto não-HD (bitmap básico). A SpriteUi funde a ergonomia de uma API Declarativa/Imediata com a performance extrema de um backend Retained (ECS).  
-A SpriteUi implementa nativamente o conjunto completo de widgets de produção:
+
+**Decisão de integração e estado:** SpriteUI não depende de ImGui. A substituição no editor da ToolEngine ainda não foi implementada. Para reduzir risco, o editor será migrado tela por tela, começando pelo Console; ImGui pode permanecer temporariamente apenas nas telas ainda não migradas. A integração deve reutilizar as abstrações de ECS, janela/input SDL3 e RHI da engine, sem adicionar uma segunda janela/event loop ou exigir Flecs. A dependência do ImGui só será removida do host após todas as telas migrarem e testes de paridade/regressão passarem. Isso é uma meta, não uma capacidade entregue.
+
+**Limite técnico do host:** os exemplos desta especificação que usam Flecs ou submetem diretamente ao Diligent são históricos/ilustrativos e não são o plano de integração da ToolEngine. Ela mantém um ECS próprio e um `tool::rhi::IDevice`; a SpriteUI deve produzir `FramePacket` e um adaptador futuro deve consumi-lo pelo RHI da engine. O RHI consultado ainda não expõe todas as capacidades diretamente requeridas pelo shader atual (buffer de instâncias no vertex shader, `Texture2DArray`/sampler e base-instance). Resolver essa diferença no contrato do RHI ou escolher uma estratégia de shader suportada é um pré-requisito, não algo a esconder em um backend paralelo.
+
+A arquitetura-alvo prevê widgets de produção; o código atual implementa componentes e lógica parcial, não o conjunto visual completo:
 
 * **Janelas e Layout:** Janelas arrastáveis (Draggable Windows), painéis redimensionáveis via Nine-Slice, Grids responsivos, abas de navegação (Tabs) e listas virtualizadas de alta densidade (DataGrid).  
 * **Interação e Controles:** Botões com transição de cor nativa, barras deslizantes (Sliders), menus suspensos (Dropdowns), ícones clicáveis e Toggle Switches.  
@@ -2026,18 +2031,19 @@ Versão declarada pelo CMake: **0.6.0**. Este estado descreve o que foi encontra
 | Layout | `Measure`/`Arrange`, Row/Column, Fixed/Percent/Auto/Flex, grow/shrink com min/max, `justifyContent`, wrap, `alignContent` e baseline implementados. Não equivale a todo o CSS Flexbox. |
 | Cena e render extraction | Árvore, bridge, clipping hierárquico, ordem de pintura, validação de pacote e batches adjacentes implementados. `NullRenderBackend` não submete à GPU. |
 | Renderização 2D auxiliar | Nine-Slice e painéis SDF arredondados implementados no core; Nine-Slice ainda não está integrado ao `LayoutSceneBridge`/`ElementVisual`. |
-| Input, navegação e widgets | Roteamento e lógica de widgets disponíveis; adaptador opcional SDL3 3.2.30 para mouse/foco validado. Criação de janela, input multi-pointer e kit completo de widgets visuais continuam pendentes. |
+| Input, navegação e widgets | Roteamento e lógica de widgets disponíveis; target SDL3 opcional com wrapper RAII de janela, mouse/foco, navegação por teclado/gamepad, texto/composição IME e clipboard implementado. Input multi-pointer e kit completo de widgets visuais continuam pendentes. |
+| Shader MSDF | `pxRange` do atlas convertido para pixels de tela usando dimensões da textura e derivadas de UV; compilação DXIL verificada. Paridade visual em GPU real pendente. |
 | Texto | Layout de glifos shaped, quebra por palavra/cluster no subconjunto implementado, linhas, caret e hit/insertion offset disponíveis. HarfBuzz/FreeType e bidi/RTL não estão integrados. |
 | Animação, bindings, persistência | ToonMotion, bindings e parser/serializador JSON estrito implementados; timeline/ECS não. |
 | Atualização on-demand | Dirty flags existem; orquestração incremental de layout/renderização e orçamento de desempenho ainda não foram validados numa engine hospedeira. |
 | Shader | Compilação offline DXIL verificada com DXC nesta máquina. Isso não valida a execução nem a paridade em GPU real. |
-| Build e testes locais | Build Debug MSVC, `spriteui_check_headers`, CTest e exemplos CLI passaram; executável reportou 727 checks. O adaptador SDL3 também compilou com SDL 3.2.30 e passou pelo CTest de pacote consumidor. |
+| Build e testes locais | Build Debug MSVC, `spriteui_check_headers`, CTest e exemplos CLI passaram; executável reportou 727 checks. O adaptador SDL3 também compilou com SDL 3.2.30 e passou os testes de input, clipboard e pacote consumidor. |
 
 ### Etapas ainda necessárias para o escopo de produção planejado
 
 1. Definir se a primeira entrega é o core sem backend ou uma GUI integrada; documentar o limite e a política de versão.
 2. Implementar e testar backend Diligent com gestão de recursos, buffers/ring, fences, blending e clipping; validar em GPU e comparar com as referências visuais.
-3. Criar adaptadores Flecs e de janela/OS (SDL3 ou GLFW), incluindo foco da janela, clipboard, IME e política de múltiplos ponteiros.
+3. Criar adaptador Flecs e completar input multi-pointer/gestão avançada de plataforma; SDL3 já oferece wrapper básico de janela, mouse/foco, navegação, texto/IME e clipboard.
 4. Integrar fontes reais (FreeType + HarfBuzz), atlas MSDF, cache e ciclo de vida; testar Unicode fora do escopo atual, incluindo bidi/RTL, no nível definido pelo produto.
 5. Ligar a lógica dos widgets ao desenho/estilo e completar o fluxo de docking drag-and-drop, se fizerem parte do produto.
 6. Implementar as integrações opt-in de Light Prism (ClusterLit/normal maps) e efeitos planejados (Acrylic Blur, Bloom e sombras).
