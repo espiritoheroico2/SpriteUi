@@ -29,6 +29,8 @@ jobs:
         run: |
           if [ "${{ matrix.compiler }}" = "msvc" ]; then
             cmake -S . -B build -DSPRITEUI_CHECK_HEADERS=ON -DSPRITEUI_BUILD_BENCHMARKS=ON
+          elif [ "${{ matrix.compiler }}" = "clang++" ]; then
+            cmake -S . -B build -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DSPRITEUI_CHECK_HEADERS=ON -DSPRITEUI_BUILD_BENCHMARKS=ON -DSPRITEUI_BUILD_FUZZERS=ON
           else
             cmake -S . -B build -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DSPRITEUI_CHECK_HEADERS=ON -DSPRITEUI_BUILD_BENCHMARKS=ON
           fi
@@ -46,6 +48,12 @@ jobs:
           else
             ./build/spriteui_benchmarks
           fi
+      - name: Fuzz configuration parser
+        if: matrix.compiler == 'clang++'
+        shell: bash
+        run: |
+          cmake -E copy_directory tests/fuzz/corpus/config "$RUNNER_TEMP/spriteui-config-fuzz-corpus"
+          ./build/spriteui_fuzz_config "$RUNNER_TEMP/spriteui-config-fuzz-corpus" -max_total_time=30
 
   sanitizers:
     name: GCC ASan + UBSan

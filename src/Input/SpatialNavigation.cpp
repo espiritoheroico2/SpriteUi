@@ -1,6 +1,20 @@
 #include "SpriteUi/Input/SpatialNavigation.hpp"
 
 namespace ToolEngine::SpriteUi::Input {
+namespace {
+
+[[nodiscard]] bool HasUsableFocusBounds(const UIFocusCandidate& candidate) noexcept {
+    return candidate.focusable && candidate.enabled && candidate.visible &&
+           IsFinite(candidate.bounds.position) &&
+           IsFinite(candidate.bounds.size) && candidate.bounds.size.x > 0.0f &&
+           candidate.bounds.size.y > 0.0f;
+}
+
+[[nodiscard]] bool IsUsableFocusCandidate(const UIFocusCandidate& candidate) noexcept {
+    return candidate.handle.IsValid() && HasUsableFocusBounds(candidate);
+}
+
+} // namespace
 
 // Seleciona o candidato mais proximo dentro de um cone de 90 graus (+-45) na direcao pedida.
 UIHandle FindSpatialNeighbor(
@@ -10,15 +24,12 @@ UIHandle FindSpatialNeighbor(
 {
     const UIFocusCandidate* origin = nullptr;
     for (const auto& candidate : candidates) {
-        if (candidate.handle == current && candidate.visible && candidate.enabled && candidate.focusable) {
+        if (candidate.handle == current && HasUsableFocusBounds(candidate)) {
             origin = &candidate;
             break;
         }
     }
-    if (!origin || !IsFinite(origin->bounds.position) || !IsFinite(origin->bounds.size) ||
-        origin->bounds.size.x <= 0.0f || origin->bounds.size.y <= 0.0f) {
-        return InvalidUIHandle;
-    }
+    if (!origin) return InvalidUIHandle;
 
     Vec2 axis{};
     switch (direction) {
@@ -33,12 +44,7 @@ UIHandle FindSpatialNeighbor(
     float bestScore = 0.0f;
 
     for (const auto& candidate : candidates) {
-        if (candidate.handle == current || !candidate.handle.IsValid() ||
-            !candidate.visible || !candidate.enabled || !candidate.focusable ||
-            !IsFinite(candidate.bounds.position) || !IsFinite(candidate.bounds.size) ||
-            candidate.bounds.size.x <= 0.0f || candidate.bounds.size.y <= 0.0f) {
-            continue;
-        }
+        if (candidate.handle == current || !IsUsableFocusCandidate(candidate)) continue;
 
         const Vec2 center = candidate.bounds.position + candidate.bounds.size * 0.5f;
         const Vec2 delta = center - originCenter;
@@ -60,89 +66,86 @@ std::vector<UISemanticEvent> UINavigationRouter::Process(
     UINavigationCommand command,
     std::span<const UIFocusCandidate> candidates)
 {
-        std::vector<UISemanticEvent> events;
-        const UIHandle previous = focused_;
-        const UIFocusCandidate* focusedCandidate = FindCandidate(focused_, candidates);
+    std::vector<UISemanticEvent> events;
+    const UIHandle previous = focused_;
+    const UIFocusCandidate* focusedCandidate = FindCandidate(focused_, candidates);
 
-        if (!focusedCandidate) {
-            focused_ = FindFirst(candidates);
-            if (focused_ != previous) {
-                events.push_back({UISemanticEventType::FocusChanged, focused_, previous});
-            }
-            // Adquirir foco consome Activate/Cancel: nao dispara acao num alvo
-            // que ainda nao estava visivelmente focado.
-            if (command == UINavigationCommand::Activate ||
-                command == UINavigationCommand::Cancel) {
-                return events;
-            }
+    if (!focusedCandidate) {
+        focused_ = FindFirst(candidates);
+        if (focused_ != previous) {
+            events.push_back({UISemanticEventType::FocusChanged, focused_, previous});
         }
-
-        UIHandle next = focused_;
-        switch (command) {
-        case UINavigationCommand::Up:
-            next = FindSpatialNeighbor(focused_, NavDirection::Up, candidates);
-            break;
-        case UINavigationCommand::Down:
-            next = FindSpatialNeighbor(focused_, NavDirection::Down, candidates);
-            break;
-        case UINavigationCommand::Left:
-            next = FindSpatialNeighbor(focused_, NavDirection::Left, candidates);
-            break;
-        case UINavigationCommand::Right:
-            next = FindSpatialNeighbor(focused_, NavDirection::Right, candidates);
-            break;
-        case UINavigationCommand::None:
-        case UINavigationCommand::Activate:
-        case UINavigationCommand::Cancel:
-            break;
+        // Acquiring focus consumes Activate/Cancel so it cannot activate a target
+        // that was not visibly focused yet.
+        if (command == UINavigationCommand::Activate ||
+            command == UINavigationCommand::Cancel) {
+            return events;
         }
-
-        if (next.IsValid() && next != focused_) {
-            const UIHandle old = focused_;
-            focused_ = next;
-            events.push_back({UISemanticEventType::FocusChanged, focused_, old});
-        }
-
-        if (command == UINavigationCommand::Activate && focused_.IsValid()) {
-            events.push_back({UISemanticEventType::Activate, focused_, focused_});
-        } else if (command == UINavigationCommand::Cancel && focused_.IsValid()) {
-            events.push_back({UISemanticEventType::Cancel, focused_, focused_});
-        }
-
-        return events;
     }
+
+    UIHandle next = focused_;
+    switch (command) {
+    case UINavigationCommand::Up:
+        next = FindSpatialNeighbor(focused_, NavDirection::Up, candidates);
+        break;
+    case UINavigationCommand::Down:
+        next = FindSpatialNeighbor(focused_, NavDirection::Down, candidates);
+        break;
+    case UINavigationCommand::Left:
+        next = FindSpatialNeighbor(focused_, NavDirection::Left, candidates);
+        break;
+    case UINavigationCommand::Right:
+        next = FindSpatialNeighbor(focused_, NavDirection::Right, candidates);
+        break;
+    case UINavigationCommand::None:
+    case UINavigationCommand::Activate:
+    case UINavigationCommand::Cancel:
+        break;
+    }
+
+    if (next.IsValid() && next != focused_) {
+        const UIHandle old = focused_;
+        focused_ = next;
+        events.push_back({UISemanticEventType::FocusChanged, focused_, old});
+    }
+
+    if (command == UINavigationCommand::Activate && focused_.IsValid()) {
+        events.push_back({UISemanticEventType::Activate, focused_, focused_});
+    } else if (command == UINavigationCommand::Cancel && focused_.IsValid()) {
+        events.push_back({UISemanticEventType::Cancel, focused_, focused_});
+    }
+
+    return events;
+}
 
 bool UINavigationRouter::IsUsable(const UIFocusCandidate& candidate) noexcept
 {
-        return candidate.handle.IsValid() && candidate.focusable && candidate.enabled &&
-               candidate.visible && IsFinite(candidate.bounds.position) &&
-               IsFinite(candidate.bounds.size) && candidate.bounds.size.x > 0.0f &&
-               candidate.bounds.size.y > 0.0f;
-    }
+    return IsUsableFocusCandidate(candidate);
+}
 
 const UIFocusCandidate* UINavigationRouter::FindCandidate(
     UIHandle handle, std::span<const UIFocusCandidate> candidates) noexcept
 {
-        if (!handle.IsValid()) return nullptr;
-        for (const auto& candidate : candidates) {
-            if (candidate.handle == handle && IsUsable(candidate)) return &candidate;
-        }
-        return nullptr;
+    if (!handle.IsValid()) return nullptr;
+    for (const auto& candidate : candidates) {
+        if (candidate.handle == handle && IsUsable(candidate)) return &candidate;
     }
+    return nullptr;
+}
 
 UIHandle UINavigationRouter::FindFirst(
     std::span<const UIFocusCandidate> candidates) noexcept
 {
-        const UIFocusCandidate* best = nullptr;
-        for (const auto& candidate : candidates) {
-            if (!IsUsable(candidate)) continue;
-            if (!best || candidate.navigationOrder < best->navigationOrder ||
-                (candidate.navigationOrder == best->navigationOrder &&
-                 candidate.handle.Pack() < best->handle.Pack())) {
-                best = &candidate;
-            }
+    const UIFocusCandidate* best = nullptr;
+    for (const auto& candidate : candidates) {
+        if (!IsUsable(candidate)) continue;
+        if (!best || candidate.navigationOrder < best->navigationOrder ||
+            (candidate.navigationOrder == best->navigationOrder &&
+             candidate.handle.Pack() < best->handle.Pack())) {
+            best = &candidate;
         }
-        return best ? best->handle : InvalidUIHandle;
     }
+    return best ? best->handle : InvalidUIHandle;
+}
 
 } // namespace ToolEngine::SpriteUi::Input

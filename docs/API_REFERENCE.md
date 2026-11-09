@@ -11,7 +11,7 @@ the optional Doxygen target with `SPRITEUI_BUILD_DOCS=ON`.
 | Input | `SpriteUi/Input/*.hpp` | Single/multi-pointer routing, semantic navigation, hit targets |
 | Layout | `SpriteUi/Layout/*.hpp` | Flex layout, entity tree, scene-to-render bridge |
 | Widgets | `SpriteUi/Widgets/*.hpp` | Logical controls, virtual lists, docking, graphs, popups |
-| Animation | `SpriteUi/Animation/ToonMotion.hpp` | Runtime tweens and stateless keyframe timeline sampling |
+| Animation | `SpriteUi/Animation/ToonMotion.hpp` | Runtime tweens and keyframe timeline sampling/playback |
 | Binding | `SpriteUi/Binding/ValueBinding.hpp` | Typed value-change detection |
 | Text | `SpriteUi/Text/*.hpp` | Shaping contract, line breaking, layout, caret, text cache |
 | Rendering | `SpriteUi/Rendering/*.hpp` | `UIRenderItem`, 80-byte GPU ABI, clips, batches, icons |
@@ -73,6 +73,15 @@ clock source, editor controls, persistence, and ECS writes.
 cmake -S . -B build -DSPRITEUI_BUILD_TESTS=ON
 cmake --build build --config Debug
 ctest --test-dir build -C Debug --output-on-failure
+```
+
+For Clang builds, an optional libFuzzer target exercises JSON settings validation and
+serialization round trips:
+
+```sh
+cmake -S . -B build-fuzz -DCMAKE_CXX_COMPILER=clang++ -DSPRITEUI_BUILD_FUZZERS=ON
+cmake --build build-fuzz --target spriteui_fuzz_config
+./build-fuzz/spriteui_fuzz_config tests/fuzz/corpus/config -max_total_time=60
 ```
 
 Generate HTML API pages when Doxygen is installed:

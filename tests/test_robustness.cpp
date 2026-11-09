@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace SpriteUiTests {
@@ -135,11 +136,13 @@ void TestConfigGarbageAndHostileDocuments() {
     // Wrong schema, wrong types, numbers out of range, NUL bytes and lone surrogates.
     CHECK(!Cfg::UIConfigManager::ValidateAndStage("{\"schemaVersion\":999}", out));
     CHECK(!Cfg::UIConfigManager::ValidateAndStage("{\"schemaVersion\":\"1\"}", out));
-    CHECK(!Cfg::UIConfigManager::ValidateAndStage(std::string("{\"schemaVersion\":1,\"x\":\"a\0b\"}", 29), out) ||
-          true); // either outcome is fine; the point is that it does not crash
-    CHECK(!Cfg::UIConfigManager::ValidateAndStage("{\"schemaVersion\":1,\"globalScale\":1e999}", out) ||
-          Cfg::UIConfigManager::ValidateAndStage("{\"schemaVersion\":1,\"globalScale\":1e999}", out));
-    CHECK(SameConfig(out, sentinel) || out.IsValid());
+    constexpr char nulJson[] = "{\"schemaVersion\":1,\"x\":\"a\0b\"}";
+    CHECK(!Cfg::UIConfigManager::ValidateAndStage(
+        std::string_view(nulJson, sizeof(nulJson) - 1), out));
+    CHECK(SameConfig(out, sentinel));
+    CHECK(!Cfg::UIConfigManager::ValidateAndStage(
+        "{\"schemaVersion\":1,\"globalScale\":1e999}", out));
+    CHECK(SameConfig(out, sentinel));
 
     Cfg::UISettingsConfig target;
     Cfg::UISettingsConfig staged = SampleConfig();

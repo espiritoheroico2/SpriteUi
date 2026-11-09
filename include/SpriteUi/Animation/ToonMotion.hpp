@@ -62,6 +62,8 @@ struct TimelineSample {
     Vec4 value{};
 };
 
+enum class TimelinePlaybackState : std::uint8_t { Stopped, Playing, Paused };
+
 // Aplica opacidade a uma cor ja pre-multiplicada (V4.2 sec. 5): RGB e A escalam juntos,
 // preservando as proporcoes RGB/A sem degradar cores emissivas.
 [[nodiscard]] inline Vec4 ApplyOpacityPremultiplied(Vec4 premultipliedTint, float opacity) noexcept {
@@ -104,6 +106,33 @@ public:
 private:
     std::vector<TimelineTrack> tracks_;
     float duration_ = 0.0f;
+};
+
+// Playback control stays independent of clocks, ECS writes, and rendering.
+class ToonTimelinePlayer {
+public:
+    void Play() noexcept { state_ = TimelinePlaybackState::Playing; }
+    void Pause() noexcept {
+        if (state_ == TimelinePlaybackState::Playing) state_ = TimelinePlaybackState::Paused;
+    }
+    void Stop() noexcept {
+        time_ = 0.0f;
+        state_ = TimelinePlaybackState::Stopped;
+    }
+    void SetLooping(bool looping) noexcept { looping_ = looping; }
+    [[nodiscard]] bool IsLooping() const noexcept { return looping_; }
+    [[nodiscard]] TimelinePlaybackState State() const noexcept { return state_; }
+    [[nodiscard]] float Time() const noexcept { return time_; }
+    [[nodiscard]] bool Seek(float time, const ToonTimeline& timeline) noexcept;
+    [[nodiscard]] bool Update(
+        float deltaTime,
+        const ToonTimeline& timeline,
+        std::vector<TimelineSample>& samples);
+
+private:
+    float time_ = 0.0f;
+    TimelinePlaybackState state_ = TimelinePlaybackState::Stopped;
+    bool looping_ = false;
 };
 
 } // namespace ToolEngine::SpriteUi::Animation

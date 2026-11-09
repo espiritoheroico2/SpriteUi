@@ -21,6 +21,7 @@ Notable changes to SpriteUI are documented here. This project has not published 
 - Documented the ToolEngine migration goal: SpriteUI remains ImGui-independent, with a staged editor replacement and ImGui removal only after regression validation.
 - Clarified the ToolEngine integration boundary: reuse its ECS, SDL event loop and custom RHI; recorded current input/render API gaps rather than adding parallel Flecs, windowing or Diligent paths.
 - Added an optional SDL3 interactive visualizer using the CPU reference renderer, with palette/toggle/slider interaction, PNG export and a headless snapshot mode; it is explicitly not a GPU preview.
+- Added an editable UTF-8 text field to the visualizer with cursor navigation, codepoint deletion, and Enter readback to the application console.
 - Added Xmind Regular as the visualizer's primary font, TTF/OTF selection via `--font`, and bitmap-coverage rendering alongside the existing MSDF path.
 - Added named visualizer text styles with consistent sizes and bottom margins, and adjusted stacked headings/cards to preserve readable vertical spacing.
 - Added clickable visualizer tabs, a synthetic two-colour selected-tab gradient, floating action buttons, and an opacity fade driven by `ToonMotionSystem`.
@@ -29,6 +30,7 @@ Notable changes to SpriteUI are documented here. This project has not published 
 - Added `docs/TOOLENGINE_INTEGRATION_GUIDE.md` with host ownership boundaries, RHI/input/ECS integration phases, asset import guidance, and MVP acceptance criteria.
 - Added stateless validated keyframe timeline sampling; host-owned playback and ECS application remain explicit integration points.
 - Added host-clock-driven timeline playback controls for play, pause, stop, seek, and looping.
+- Added an optional Clang libFuzzer target for JSON settings validation/round trips, with ASan/UBSan and a CI corpus run.
 - Added host-agnostic multi-pointer frame routing with isolated capture/hover state, deterministic cancellation for omitted pointers, and duplicate-frame/input validation.
 - Added SDL3 finger down/motion/up/cancel translation into logical pointer snapshots, including synthesized touch-mouse filtering and simultaneous-contact tests.
 - Added the `fotos/LOGO.png` image to the visualizer's featured-ad card through an optional Windows Imaging Component PNG loader; headless tests assert the image pixels render.
@@ -37,6 +39,7 @@ Notable changes to SpriteUI are documented here. This project has not published 
 ### Fixed
 
 - Corrected MSDF screen-space coverage by converting the atlas `pxRange` from texels using the texture dimensions before applying UV derivatives.
+- Centralized focus-candidate validation for spatial and semantic navigation without changing routing behavior.
 
 ### Still out of scope
 

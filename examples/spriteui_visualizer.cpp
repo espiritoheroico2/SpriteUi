@@ -52,8 +52,10 @@ constexpr SU::UIHandle StyleTab{5, 1};
 constexpr SU::UIHandle LayoutTab{6, 1};
 constexpr SU::UIHandle FadeButton{7, 1};
 constexpr SU::UIHandle FloatingActionButton{8, 1};
+constexpr SU::UIHandle TextFieldTarget{9, 1};
 constexpr std::uint32_t GradientTextureSlice = 2;
 constexpr std::uint32_t LogoTextureSlice = 3;
+constexpr std::size_t TextFieldMaxBytes = 128;
 
 enum class TextStyle : std::uint8_t {
     Title,
@@ -70,6 +72,74 @@ struct TextStyleSpec {
     float marginAfter;
 };
 
+struct TextFieldState {
+    std::string value = "god only knows";
+    SU::Widgets::UITextInputComponent editor;
+
+    TextFieldState() {
+        editor.cursorCluster = static_cast<std::uint32_t>(value.size());
+    }
+};
+
+SU::Rect TextFieldRect() {
+    return {{24.0f, 104.0f}, {157.0f, 34.0f}};
+}
+
+bool IsUtf8Continuation(char value) {
+    return (static_cast<unsigned char>(value) & 0xC0u) == 0x80u;
+}
+
+std::size_t PreviousCodePointStart(std::string_view value, std::size_t offset) {
+    if (offset == 0 || offset > value.size()) return offset;
+    std::size_t start = offset - 1;
+    while (start > 0 && IsUtf8Continuation(value[start])) --start;
+    return start;
+}
+
+std::size_t NextCodePointEnd(std::string_view value, std::size_t offset) {
+    if (offset >= value.size()) return value.size();
+    std::size_t end = offset + 1;
+    while (end < value.size() && IsUtf8Continuation(value[end])) ++end;
+    return end;
+}
+
+std::size_t Utf8PrefixLength(std::string_view value, std::size_t maxBytes) {
+    std::size_t length = std::min(value.size(), maxBytes);
+    if (length < value.size()) {
+        while (length > 0 && IsUtf8Continuation(value[length])) --length;
+    }
+    return length;
+}
+
+void InsertCommittedText(TextFieldState& field, std::string_view text) {
+    if (field.value.size() >= TextFieldMaxBytes) return;
+    const std::size_t cursor = std::min<std::size_t>(field.editor.cursorCluster, field.value.size());
+    const std::size_t available = TextFieldMaxBytes - field.value.size();
+    const std::size_t insertLength = Utf8PrefixLength(text, available);
+    if (insertLength == 0) return;
+    field.value.insert(cursor, text.substr(0, insertLength));
+    field.editor.MoveCursor(static_cast<std::uint32_t>(cursor + insertLength));
+}
+
+void DeletePreviousCodePoint(TextFieldState& field) {
+    const std::size_t cursor = std::min<std::size_t>(field.editor.cursorCluster, field.value.size());
+    if (cursor == 0) return;
+    const std::size_t previous = PreviousCodePointStart(field.value, cursor);
+    field.value.erase(previous, cursor - previous);
+    field.editor.MoveCursor(static_cast<std::uint32_t>(previous));
+}
+
+void DeleteNextCodePoint(TextFieldState& field) {
+    const std::size_t cursor = std::min<std::size_t>(field.editor.cursorCluster, field.value.size());
+    if (cursor >= field.value.size()) return;
+    field.value.erase(cursor, NextCodePointEnd(field.value, cursor) - cursor);
+    field.editor.MoveCursor(static_cast<std::uint32_t>(cursor));
+}
+
+std::string ReadTextFieldValue(const TextFieldState& field) {
+    return field.value;
+}
+
 TextStyleSpec GetTextStyle(TextStyle style) {
     switch (style) {
     case TextStyle::Title: return {22.0f, 8.0f};
@@ -81,6 +151,43 @@ TextStyleSpec GetTextStyle(TextStyle style) {
     case TextStyle::Footer: return {9.0f, 0.0f};
     }
     return {14.0f, 6.0f};
+}
+
+SU::Text::TextLayoutResult LayoutTextField(
+    std::string_view value, const SpriteUIVisualizer::BitmapFont& font) {
+    SU::Text::TextLayoutConfig config;
+    config.fontSize = GetTextStyle(TextStyle::Body).fontSize;
+    const auto glyphs = font.Shape(value);
+    return SU::Text::LayoutText(value, glyphs, font.Metrics(), config);
+}
+
+float TextFieldScrollX(const SU::Text::TextLayoutResult& layout, float visibleWidth,
+                       std::uint32_t cursorByteOffset) {
+    const SU::Rect caret = SU::Text::GetCaretRect(layout, cursorByteOffset);
+    return std::max(0.0f, caret.position.x - (visibleWidth - 3.0f));
+}
+
+bool UpdateNativeTextInputArea(
+    SDL_Window* window,
+    const TextFieldState& field,
+    const SpriteUIVisualizer::BitmapFont& font) {
+    const SU::Rect rect = TextFieldRect();
+    const SU::Rect clip{{rect.position.x + 7.0f, rect.position.y + 4.0f},
+                        {rect.size.x - 14.0f, rect.size.y - 8.0f}};
+    const auto layout = LayoutTextField(field.value, font);
+    const SU::Rect caret = SU::Text::GetCaretRect(
+        layout, std::min<std::uint32_t>(
+            field.editor.cursorCluster, static_cast<std::uint32_t>(field.value.size())));
+    const float scrollX = TextFieldScrollX(layout, clip.size.x, field.editor.cursorCluster);
+    SDL_Rect area{
+        static_cast<int>(std::lround(rect.position.x)),
+        static_cast<int>(std::lround(rect.position.y)),
+        static_cast<int>(std::lround(rect.size.x)),
+        static_cast<int>(std::lround(rect.size.y))
+    };
+    const int cursorX = static_cast<int>(std::lround(
+        7.0f + caret.position.x - scrollX));
+    return SDL_SetTextInputArea(window, &area, cursorX);
 }
 
 float TextLine(Visual::Scene& scene, const SpriteUIVisualizer::BitmapFont& font,
@@ -185,6 +292,7 @@ std::vector<Input::HitTarget> BuildTargets(float width, float height,
     AddTarget(targets, LayoutTab, TabRect(width, font, 2), 42);
     AddTarget(targets, FadeButton, FloatingButtonRect(width, height, panelTop, true), 50);
     AddTarget(targets, FloatingActionButton, FloatingButtonRect(width, height, panelTop, false), 51);
+    AddTarget(targets, TextFieldTarget, TextFieldRect(), 60);
     return targets;
 }
 
@@ -192,7 +300,9 @@ Visual::Image BuildScene(int width, int height, std::size_t paletteIndex,
                          bool toggleOn, float sliderValue, std::size_t selectedTab,
                          float fabOpacity,
                          const Input::UIPointerRoutingState& routing,
-                         SU::Vec2 pointer, const SpriteUIVisualizer::BitmapFont& font,
+                         SU::Vec2 pointer, std::string_view textFieldValue,
+                         const SU::Widgets::UITextInputComponent& textFieldEditor,
+                         const SpriteUIVisualizer::BitmapFont& font,
                          const SpriteUIVisualizer::BitmapImage& logo,
                          float dpiScale = 1.0f) {
     const Palette& colors = Palettes[paletteIndex % Palettes.size()];
@@ -228,8 +338,9 @@ Visual::Image BuildScene(int width, int height, std::size_t paletteIndex,
     TextLine(scene, font, w - 148.0f, 31.0f, "CYCLE PALETTE",
              colors.text, TextStyle::Label);
 
-    scene.Rect({{24.0f, 104.0f}, {sidebarWidth - 48.0f, 34.0f}},
-               colors.surface, 0, Rendering::FlagRoundedPanel, 7.0f);
+    const SU::Rect textField = TextFieldRect();
+    scene.Rect(textField, colors.surface, 0, Rendering::FlagRoundedPanel, 7.0f);
+    if (textFieldEditor.hasFocus) scene.Outline(textField, 1.0f, colors.accent);
     TextLine(scene, font, 38.0f, 78.0f, "WORKSPACE", colors.text, TextStyle::Subtitle);
     for (int i = 0; i < 5; ++i) {
         const float y = 164.0f + static_cast<float>(i) * 48.0f;
@@ -250,8 +361,31 @@ Visual::Image BuildScene(int width, int height, std::size_t paletteIndex,
         scene, font, 38.0f, 402.0f, "SPRITE UI", colors.muted, TextStyle::Subtitle);
     TextLine(scene, font, 38.0f, brandCaptionY, "REFERENCE VIEW",
              colors.muted, TextStyle::Caption);
-    TextLine(scene, font, 38.0f, 116.0f, "SEARCH COMPONENTS",
-             colors.text, TextStyle::Label);
+    const auto fieldLayout = LayoutTextField(textFieldValue, font);
+    const SU::Rect fieldTextClip{{textField.position.x + 7.0f, textField.position.y + 4.0f},
+                                {textField.size.x - 14.0f, textField.size.y - 8.0f}};
+    const std::uint32_t fieldClipIndex = scene.AddClip({
+        fieldTextClip.position.x, fieldTextClip.position.y,
+        fieldTextClip.position.x + fieldTextClip.size.x,
+        fieldTextClip.position.y + fieldTextClip.size.y});
+    const SU::Rect caret = SU::Text::GetCaretRect(
+        fieldLayout, std::min<std::uint32_t>(
+            textFieldEditor.cursorCluster, static_cast<std::uint32_t>(textFieldValue.size())));
+    const float horizontalScroll = TextFieldScrollX(
+        fieldLayout, fieldTextClip.size.x, textFieldEditor.cursorCluster);
+    const SU::Vec2 fieldTextOrigin{
+        fieldTextClip.position.x - horizontalScroll,
+        fieldTextClip.position.y + (fieldTextClip.size.y - fieldLayout.lineHeight) * 0.5f
+    };
+    scene.Text(fieldLayout, fieldTextOrigin, colors.text,
+               SpriteUIVisualizer::BitmapFont::TextureSlice,
+               Rendering::FlagBitmapText, fieldClipIndex);
+    if (textFieldEditor.IsCursorVisible()) {
+        scene.Caret(caret, fieldTextOrigin, colors.accent, 1.5f);
+        scene.Items().back().clipIndex = fieldClipIndex;
+    }
+    TextLine(scene, font, 38.0f, 143.0f, "ENTER TO READ VALUE",
+             colors.muted, TextStyle::Caption);
 
     float cardsY = TextLine(
         scene, font, contentX + 30.0f, 76.0f, "INTERFACE QUALITY SANDBOX",
@@ -452,6 +586,16 @@ bool ContainsAntialiasedHeaderText(const Visual::Image& image) {
     return coveredPixels >= 40 && edgePixels > 0;
 }
 
+bool ContainsTextFieldContent(const Visual::Image& image) {
+    std::size_t textPixels = 0;
+    for (int y = 108; y < 134; ++y) {
+        for (int x = 32; x < 180; ++x) {
+            if (!Visual::PixelIs(image, x, y, Palettes[0].surface, 3)) ++textPixels;
+        }
+    }
+    return textPixels >= 20;
+}
+
 bool ContainsFeaturedLogo(const Visual::Image& image,
                           const SpriteUIVisualizer::BitmapFont& font) {
     const SU::Rect tab = TabRect(static_cast<float>(image.width), font, 0);
@@ -573,10 +717,43 @@ int main(int argc, char** argv) {
               << " (" << logo.SourcePath().string() << ")\n";
 
     if (headless) {
+        TextFieldState fieldTest;
+        if (ReadTextFieldValue(fieldTest) != "god only knows") {
+            std::cerr << "The text field did not initialize with the requested value.\n";
+            return 1;
+        }
+        fieldTest.editor.MoveCursor(3);
+        InsertCommittedText(fieldTest, " UI");
+        if (ReadTextFieldValue(fieldTest) != "god UI only knows") {
+            std::cerr << "The text field did not insert text at the cursor.\n";
+            return 1;
+        }
+        DeletePreviousCodePoint(fieldTest);
+        if (ReadTextFieldValue(fieldTest) != "god U only knows") {
+            std::cerr << "The text field did not delete the previous character.\n";
+            return 1;
+        }
+        TextFieldState unicodeTest;
+        unicodeTest.value = "A\xc3\xa9" "B";
+        unicodeTest.editor.cursorCluster = 3;
+        DeletePreviousCodePoint(unicodeTest);
+        if (ReadTextFieldValue(unicodeTest) != "AB") {
+            std::cerr << "The text field split a UTF-8 code point while deleting.\n";
+            return 1;
+        }
+        std::cout << "Headless text field edit/readback passed: "
+                  << ReadTextFieldValue(fieldTest) << '\n';
+
+        TextFieldState previewField;
         const Visual::Image image = BuildScene(
-            1180, 760, 0, true, 0.64f, 0, 0.68f, {}, {-1.0f, -1.0f}, font, logo);
+            1180, 760, 0, true, 0.64f, 0, 0.68f, {}, {-1.0f, -1.0f},
+            previewField.value, previewField.editor, font, logo);
         if (!ContainsAntialiasedHeaderText(image)) {
             std::cerr << "The font atlas did not render the expected antialiased header text.\n";
+            return 1;
+        }
+        if (!ContainsTextFieldContent(image)) {
+            std::cerr << "The initial text field value did not render in the preview.\n";
             return 1;
         }
         if (!ContainsFeaturedLogo(image, font)) {
@@ -624,6 +801,7 @@ int main(int argc, char** argv) {
     bool primaryPressed = false;
     bool primaryReleased = false;
     bool saveRequested = false;
+    bool nativeTextInputActive = false;
     bool toggleOn = true;
     bool fabVisible = true;
     bool dirty = true;
@@ -635,6 +813,7 @@ int main(int argc, char** argv) {
     std::size_t selectedTab = 0;
     std::uint64_t frameId = 0;
     Input::UIEventRouter router;
+    TextFieldState textField;
     Animation::ToonMotionSystem motion;
     auto previousUpdateTime = std::chrono::steady_clock::now();
     SDL_Texture* frameTexture = nullptr;
@@ -658,6 +837,11 @@ int main(int argc, char** argv) {
                 focused = false;
                 primaryDown = false;
                 dirty = true;
+            } else if (event.type == SDL_EVENT_TEXT_INPUT &&
+                       event.text.windowID == SDL_GetWindowID(window) &&
+                       focused && textField.editor.hasFocus && event.text.text) {
+                InsertCommittedText(textField, event.text.text);
+                dirty = true;
             } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                        event.button.windowID == SDL_GetWindowID(window) &&
                        event.button.button == SDL_BUTTON_LEFT) {
@@ -670,10 +854,55 @@ int main(int argc, char** argv) {
                 primaryDown = false;
                 primaryReleased = true;
                 dirty = true;
-            } else if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
-                       event.key.key == SDLK_S) {
-                saveRequested = true;
-                dirty = true;
+            } else if (event.type == SDL_EVENT_KEY_DOWN &&
+                       event.key.windowID == SDL_GetWindowID(window)) {
+                if (textField.editor.hasFocus) {
+                    switch (event.key.key) {
+                    case SDLK_BACKSPACE:
+                        DeletePreviousCodePoint(textField);
+                        dirty = true;
+                        break;
+                    case SDLK_DELETE:
+                        DeleteNextCodePoint(textField);
+                        dirty = true;
+                        break;
+                    case SDLK_LEFT: {
+                        const std::size_t cursor = textField.editor.cursorCluster;
+                        textField.editor.MoveCursor(static_cast<std::uint32_t>(
+                            PreviousCodePointStart(textField.value, cursor)));
+                        dirty = true;
+                        break;
+                    }
+                    case SDLK_RIGHT: {
+                        const std::size_t cursor = textField.editor.cursorCluster;
+                        textField.editor.MoveCursor(static_cast<std::uint32_t>(
+                            NextCodePointEnd(textField.value, cursor)));
+                        dirty = true;
+                        break;
+                    }
+                    case SDLK_HOME:
+                        textField.editor.MoveCursor(0);
+                        dirty = true;
+                        break;
+                    case SDLK_END:
+                        textField.editor.MoveCursor(
+                            static_cast<std::uint32_t>(textField.value.size()));
+                        dirty = true;
+                        break;
+                    case SDLK_RETURN:
+                    case SDLK_RETURN2:
+                        if (!event.key.repeat) {
+                            std::cout << "Text field value returned to application: "
+                                      << ReadTextFieldValue(textField) << '\n';
+                        }
+                        break;
+                    default:
+                        break;
+                    }
+                } else if (!event.key.repeat && event.key.key == SDLK_S) {
+                    saveRequested = true;
+                    dirty = true;
+                }
             }
         }
         if (!running) break;
@@ -719,6 +948,18 @@ int main(int argc, char** argv) {
         input.frameId = ++frameId;
         const auto uiEvents = router.Process(input, targets);
         for (const Input::UIEvent& uiEvent : uiEvents) {
+            if (uiEvent.type == Input::UIEventType::PointerDown &&
+                uiEvent.target == TextFieldTarget) {
+                const auto layout = LayoutTextField(textField.value, font);
+                const SU::Rect rect = TextFieldRect();
+                const float visibleWidth = rect.size.x - 14.0f;
+                const float scrollX = TextFieldScrollX(
+                    layout, visibleWidth, textField.editor.cursorCluster);
+                const std::uint32_t byteOffset = SU::Text::FindInsertionOffset(
+                    layout, {uiEvent.localPosition.x - 7.0f + scrollX, 0.0f});
+                textField.editor.MoveCursor(byteOffset);
+                dirty = true;
+            }
             if (uiEvent.type != Input::UIEventType::Click) continue;
             if (uiEvent.target == PaletteButton) {
                 paletteIndex = (paletteIndex + 1u) % Palettes.size();
@@ -749,12 +990,33 @@ int main(int argc, char** argv) {
             dirty = true;
         }
 
+        const bool textFieldFocused =
+            focused && router.GetState().focusedEntity == TextFieldTarget;
+        if (textField.editor.hasFocus != textFieldFocused) {
+            textField.editor.hasFocus = textFieldFocused;
+            textField.editor.blinkTimer = 0.0f;
+            const bool success = textFieldFocused
+                ? SDL_StartTextInput(window)
+                : SDL_StopTextInput(window);
+            if (!success) {
+                std::cerr << "Could not " << (textFieldFocused ? "start" : "stop")
+                          << " SDL text input: " << SDL_GetError() << '\n';
+                running = false;
+            } else {
+                nativeTextInputActive = textFieldFocused;
+            }
+            dirty = true;
+        }
+
         const auto updateTime = std::chrono::steady_clock::now();
         const float deltaTime = std::clamp(
             std::chrono::duration<float>(updateTime - previousUpdateTime).count(),
             0.0f, 0.05f);
         previousUpdateTime = updateTime;
         const Animation::TweenUpdate animationUpdate = motion.Update(deltaTime);
+        const bool cursorWasVisible = textField.editor.IsCursorVisible();
+        textField.editor.UpdateBlink(deltaTime);
+        dirty = dirty || cursorWasVisible != textField.editor.IsCursorVisible();
         for (const Animation::TweenSample& sample : animationUpdate.samples) {
             if (sample.target == FloatingActionButton &&
                 sample.property == Animation::TweenProperty::Opacity) {
@@ -771,12 +1033,20 @@ int main(int argc, char** argv) {
             dirty = true;
         }
 
+        if (textField.editor.hasFocus && dirty &&
+            !UpdateNativeTextInputArea(window, textField, font)) {
+            std::cerr << "Could not update SDL text input area: " << SDL_GetError() << '\n';
+            running = false;
+            break;
+        }
+
         if (dirty) {
             if (saveRequested) {
                 const Visual::Image fullResolution = BuildScene(
                     width, height, paletteIndex, toggleOn, sliderValue,
                     selectedTab, fabOpacity,
-                    router.GetState(), {mouseX, mouseY}, font, logo);
+                    router.GetState(), {mouseX, mouseY},
+                    textField.value, textField.editor, font, logo);
                 const std::string path = Visual::SaveSnapshot(
                     fullResolution, "spriteui_visualizer_" + std::to_string(frameId));
                 if (path.empty()) {
@@ -790,7 +1060,8 @@ int main(int argc, char** argv) {
             const Visual::Image image = BuildScene(
                 frameWidth, frameHeight, paletteIndex, toggleOn, sliderValue,
                 selectedTab, fabOpacity,
-                router.GetState(), {mouseX, mouseY}, font, logo, InteractiveRenderScale);
+                router.GetState(), {mouseX, mouseY},
+                textField.value, textField.editor, font, logo, InteractiveRenderScale);
             if (!UploadImage(frameTexture, image)) {
                 std::cerr << "SDL_UpdateTexture failed: " << SDL_GetError() << '\n';
                 running = false;
@@ -814,6 +1085,7 @@ int main(int argc, char** argv) {
         SDL_Delay(8);
     }
 
+    if (nativeTextInputActive) (void)SDL_StopTextInput(window);
     if (frameTexture) SDL_DestroyTexture(frameTexture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);

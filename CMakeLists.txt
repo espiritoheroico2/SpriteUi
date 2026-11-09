@@ -4,6 +4,7 @@ project(SpriteUI VERSION 0.6.0 LANGUAGES CXX)
 option(SPRITEUI_BUILD_EXAMPLES "Build SpriteUI examples" ON)
 option(SPRITEUI_BUILD_TESTS "Build SpriteUI tests" ON)
 option(SPRITEUI_BUILD_BENCHMARKS "Build lightweight CPU benchmarks" OFF)
+option(SPRITEUI_BUILD_FUZZERS "Build Clang libFuzzer targets" OFF)
 option(SPRITEUI_BUILD_SDL3_ADAPTER "Build the optional SDL3 window-input adapter" OFF)
 option(SPRITEUI_BUILD_VISUALIZER "Build the interactive SDL3 CPU visualizer" OFF)
 option(SPRITEUI_BUILD_DOCS "Build the Doxygen API reference" OFF)
@@ -87,6 +88,25 @@ if(SPRITEUI_ENABLE_WARNINGS)
     else()
         target_compile_options(SpriteUI PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
     endif()
+endif()
+
+if(SPRITEUI_BUILD_FUZZERS)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "SPRITEUI_BUILD_FUZZERS requires Clang with libFuzzer support.")
+    endif()
+    target_compile_options(SpriteUI PRIVATE
+        -fsanitize=fuzzer-no-link,address,undefined
+        -fno-omit-frame-pointer
+    )
+    target_link_options(SpriteUI INTERFACE -fsanitize=address,undefined)
+
+    add_executable(spriteui_fuzz_config tests/fuzz_config.cpp)
+    target_link_libraries(spriteui_fuzz_config PRIVATE SpriteUi::SpriteUI)
+    target_compile_options(spriteui_fuzz_config PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+    target_link_options(spriteui_fuzz_config PRIVATE -fsanitize=fuzzer,address,undefined)
 endif()
 
 if(SPRITEUI_BUILD_EXAMPLES)

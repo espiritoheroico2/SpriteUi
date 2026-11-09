@@ -332,12 +332,14 @@ public:
     // Each glyph quad becomes a textured rectangle from the selected atlas page.
     Scene& Text(const SU::Text::TextLayoutResult& layout, SU::Vec2 origin, SU::Vec4 srgb,
                 std::uint32_t textureSlice = R::WhiteTextureSlice,
-                std::uint32_t flags = R::FlagMsdfText) {
+                std::uint32_t flags = R::FlagMsdfText,
+                std::uint32_t clipIndex = R::NoClipIndex) {
         for (const auto& q : layout.quads) {
             if (q.bounds.size.x <= 0.0f || q.bounds.size.y <= 0.0f) continue;
             Rect({{origin.x + q.bounds.position.x, origin.y + q.bounds.position.y}, q.bounds.size},
                  srgb, textureSlice, flags);
             std::copy(std::begin(q.uvRect), std::end(q.uvRect), items_.back().uvRect);
+            items_.back().clipIndex = clipIndex;
         }
         return *this;
     }

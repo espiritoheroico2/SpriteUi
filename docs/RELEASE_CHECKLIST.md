@@ -6,7 +6,7 @@ Legenda: ✅ feito **e verificado** neste ambiente · 🟡 feito, **não verific
 ⬜ pendente · ⛔ bloqueia a publicação.
 
 **Ambiente verificado nesta rodada:** Windows, MSVC, CMake Debug, build de `spriteui_tests` e
-`spriteui_visualizer`, teste core (**787 checks**) e CTest (5/5, incluindo snapshot, SDL3 e pacote
+`spriteui_visualizer`, teste core (**819 checks**) e CTest (5/5, incluindo snapshot, SDL3 e pacote
 consumidor). O benchmark CPU também foi executado localmente nas duas configurações. O adaptador
 SDL3 e o pacote instalado passaram com SDL 3.2.30. Nesta continuação, os shaders VS/PS foram
 recompilados após a correção do cálculo de cobertura MSDF, e CTest passou (2/2).
@@ -62,7 +62,7 @@ o workspace (aprox. 312 MiB); os fontes e imagens de referência versionáveis f
 | 🟡 | Referência de API / Doxygen | Página de referência e target opcional configurados; não foi possível gerar HTML, pois Doxygen não está instalado |
 
 ### Mudanças de comportamento: nenhuma quebra de API
-Todas as APIs existentes mantêm o comportamento; o executável reportou 787 checks aprovados. O que
+Todas as APIs existentes mantêm o comportamento; o executável reportou 819 checks aprovados. O que
 poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCaretRect`,
 `FindInsertionOffset`, `LayoutText(utf8, ...)`) e as versões antigas ficaram documentadas como legado.
 **Decisão sua pendente:** quando marcar as antigas como `[[deprecated]]`.
@@ -84,7 +84,7 @@ poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCare
 **Qualidade**
 - ⬜ Baselines e orçamento por frame para benchmarks (alvo atual cobre layout e extração; JSON/texto ainda faltam)
 - Referência local (Windows/MSVC; 250 iterações, 1.000 filhos/itens): Debug — layout 1,90 ms/frame, extração 1,70 ms/frame; Release — layout 0,066 ms/frame, extração 0,205 ms/frame. Medições indicativas, sem controle de ruído ou meta de aprovação.
-- ⬜ Fuzz contínuo do JSON (libFuzzer/OSS-Fuzz) com corpus; hoje o fuzz roda dentro dos testes
+- 🟡 Fuzz libFuzzer do JSON configurado na CI Clang com ASan/UBSan e corpus-semente; execução remota ainda não confirmada
 - ⬜ Cobertura de código (gcov/llvm-cov) e meta mínima
 - ⬜ Testes de paridade CPU↔GPU (captura do backend real contra `docs/img`)
 - ⬜ Teste de integração com **HarfBuzz/FreeType reais** (hoje só o `ShapeDebug` exercita o contrato `clusterByteOffset`)
@@ -98,7 +98,7 @@ poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCare
 **Documentação e projeto**
 - ✅ `README.md` com screenshots do backend de software, quick start e limites
 - ✅ `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md` e notas de thread-safety adicionados
-- ⬜ Referência de API (Doxygen) e guia de integração na engine
+- 🟡 Referência de API e guia de integração implementados; geração HTML por Doxygen não verificada (ferramenta indisponível)
 - ⬜ `THIRD_PARTY_NOTICES` quando entrarem Diligent (Apache-2.0), Flecs/QuickJS/HarfBuzz (MIT) e FreeType (FTL/GPLv2: escolher)
 - ✅ `LICENSE`, `.clang-format`, `.editorconfig`, `CMakePresets.json` já existem
 - ⬜ Pacote para vcpkg/Conan; `install(EXPORT)` já existe, falta testar `find_package(SpriteUI)` num projeto consumidor
@@ -109,7 +109,7 @@ poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCare
 | # | Documento | Código | Ação |
 |---|---|---|---|
 | 1 | A especificação sugere ordenar por material | `RenderExtractor` ordena por `(layer, zOrder, paintOrder)` e só agrupa itens adjacentes | Preservar a ordem visual do código; atualizar a especificação antes de tratá-la como contrato de batching |
-| 2 | Matriz de QA e quantidades por categoria são históricas e inconsistentes | A execução atual reporta 787 checks totais; não foi validada uma contagem por categoria | Não publicar números por suíte sem recalcular a matriz |
+| 2 | Matriz de QA e quantidades por categoria são históricas e inconsistentes | A execução atual reporta 819 checks totais; não foi validada uma contagem por categoria | Não publicar números por suíte sem recalcular a matriz |
 | 3 | Estado antigo diz que Flex wrap, quebra por palavra e Nine-Slice não existem | Essas capacidades e testes estão no código atual | Estado atualizado neste checklist; manter os documentos de arquitetura sincronizados |
 | 4 | Alegações de integração HarfBuzz/FreeType e validação em múltiplas toolchains | Shaper de debug existe; integração real de fontes pendente. MSVC/DXC foram verificados; Clang/GCC não nesta rodada | Distinguir código auxiliar de integração de produção e registrar a toolchain usada |
 | 5 | Contratos de SDF e exemplos de input/animação diferem do código atual | Implementações de referência estão em `PanelSdf`, `InputRouter` e `ToonMotion` | Revisar os exemplos e fórmulas normativos antes de uma nova versão da especificação |
@@ -122,7 +122,7 @@ poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCare
 - Painel SDF: referência para preenchimento arredondado; bordas, sombras e efeitos continuam pendentes.
 - Baseline: implementado em `Row`; em `Column` equivale a `Start`.
 - O backend de software dos testes **não** é o backend de produção: valida a matemática, não o driver.
-- O target SDL3 opcional cobre wrapper básico de janela, mouse/foco, navegação, texto UTF-8, composição IME e clipboard; input multi-pointer continua pendente.
+- O target SDL3 opcional cobre wrapper básico de janela, mouse/foco, navegação, texto UTF-8, composição IME, clipboard e snapshots multi-pointer.
 
 ## 6. Caminho crítico sugerido
 
@@ -140,5 +140,5 @@ poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCare
 g++ -std=c++20 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
     -fsanitize=address,undefined -fno-sanitize-recover=all -Iinclude -Itests -Itests/Legacy \
     $(find src -name '*.cpp') tests/*.cpp tests/Legacy/LegacyLayout.cpp -o spriteui_tests
-SPRITEUI_SNAPSHOT_DIR=snapshots ./spriteui_tests     # escreve os PNGs e imprime "All 787 checks passed."
+SPRITEUI_SNAPSHOT_DIR=snapshots ./spriteui_tests     # escreve os PNGs e imprime "All 819 checks passed."
 ```
