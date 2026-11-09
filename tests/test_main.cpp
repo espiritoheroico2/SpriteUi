@@ -155,9 +155,38 @@ void TestMultiPointerRouter() {
     CHECK(result.valid);
     CHECK(router.PointerCount() == 0);
 
+    UIMultiPointerEventRouter cancellationRouter;
+    UIInputSnapshot touchDown;
+    touchDown.pointerId = 303;
+    touchDown.pointerPositionLogical = {20, 20};
+    touchDown.primaryDown = true;
+    touchDown.primaryPressed = true;
+    touchDown.frameId = 1;
+    result = cancellationRouter.ProcessFrame(
+        1, std::span<const UIInputSnapshot>(&touchDown, 1), targets);
+    CHECK(result.valid);
+    touchDown.frameId = 2;
+    touchDown.primaryDown = false;
+    touchDown.primaryPressed = false;
+    touchDown.pointerCancelled = true;
+    result = cancellationRouter.ProcessFrame(
+        2, std::span<const UIInputSnapshot>(&touchDown, 1), targets);
+    CHECK(result.valid);
+    CHECK(std::any_of(result.events.begin(), result.events.end(), [](const UIEvent& event) {
+        return event.type == UIEventType::Cancel && event.pointerId == 303;
+    }));
+    CHECK(std::none_of(result.events.begin(), result.events.end(), [](const UIEvent& event) {
+        return event.type == UIEventType::Click && event.pointerId == 303;
+    }));
+
     std::array<UIInputSnapshot, 2> duplicate{};
     duplicate[0].pointerId = duplicate[1].pointerId = 9;
-    duplicate[0].frameId = duplicate[1].frameId = 5;
+    duplicate[0].frameId = 5;
+    duplicate[1].frameId = 6;
+    result = router.ProcessFrame(5, duplicate, targets);
+    CHECK(!result.valid);
+    CHECK(router.PointerCount() == 0);
+    duplicate[1].frameId = 5;
     result = router.ProcessFrame(5, duplicate, targets);
     CHECK(!result.valid);
     CHECK(router.PointerCount() == 0);
@@ -661,6 +690,62 @@ void TestToonTimeline() {
     CHECK(Near(timeline.Duration(), 2.0f));
     CHECK(timeline.RemoveTrack(opacity.target, opacity.property));
     CHECK(Near(timeline.Duration(), 0.0f));
+}
+
+void TestToonTimelinePlayer() {
+    using namespace ToolEngine::SpriteUi::Animation;
+
+    ToonTimeline timeline;
+    TimelineTrack track;
+    track.target = {72, 1};
+    track.property = TweenProperty::Opacity;
+    track.keyframes = {{0.0f, {}, Easing::Linear},
+                       {2.0f, {1, 0, 0, 0}, Easing::Linear}};
+    CHECK(timeline.AddTrack(track));
+
+    ToonTimelinePlayer player;
+    std::vector<TimelineSample> samples;
+    CHECK(player.State() == TimelinePlaybackState::Stopped);
+    CHECK(player.Update(1.0f, timeline, samples));
+    CHECK(samples.size() == 1);
+    CHECK(Near(player.Time(), 0.0f));
+
+    player.Play();
+    CHECK(player.Update(0.5f, timeline, samples));
+    CHECK(player.State() == TimelinePlaybackState::Playing);
+    CHECK(Near(player.Time(), 0.5f));
+    CHECK(Near(samples[0].value.x, 0.25f));
+
+    player.Pause();
+    CHECK(player.Update(0.5f, timeline, samples));
+    CHECK(player.State() == TimelinePlaybackState::Paused);
+    CHECK(Near(player.Time(), 0.5f));
+    CHECK(Near(samples[0].value.x, 0.25f));
+
+    player.Play();
+    CHECK(player.Update(2.0f, timeline, samples));
+    CHECK(player.State() == TimelinePlaybackState::Stopped);
+    CHECK(Near(player.Time(), 2.0f));
+    CHECK(Near(samples[0].value.x, 1.0f));
+
+    CHECK(!player.Seek(std::numeric_limits<float>::infinity(), timeline));
+    CHECK(player.Seek(1.5f, timeline));
+    CHECK(Near(player.Time(), 1.5f));
+    player.SetLooping(true);
+    CHECK(player.Seek(5.0f, timeline));
+    CHECK(Near(player.Time(), 1.0f));
+    player.Play();
+    CHECK(player.Update(2.5f, timeline, samples));
+    CHECK(Near(player.Time(), 1.5f));
+    CHECK(player.State() == TimelinePlaybackState::Playing);
+    CHECK(!player.Update(-1.0f, timeline, samples));
+    CHECK(Near(player.Time(), 1.5f));
+
+    player.Stop();
+    CHECK(player.State() == TimelinePlaybackState::Stopped);
+    CHECK(Near(player.Time(), 0.0f));
+    CHECK(player.Update(std::numeric_limits<float>::max(), timeline, samples));
+    CHECK(Near(player.Time(), 0.0f));
 }
 
 void TestRendererAbiPremultiplicationAndBatching() {
@@ -1306,6 +1391,7 @@ int main() {
     TestWidgets();
     TestToonMotion();
     TestToonTimeline();
+    TestToonTimelinePlayer();
     TestTweenConflictPolicies();
     TestRendererAbiPremultiplicationAndBatching();
     TestFontMetricsAndTextLayout();

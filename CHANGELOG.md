@@ -28,7 +28,9 @@ Notable changes to SpriteUI are documented here. This project has not published 
 - Added per-item opacity during render extraction, preserving premultiplied alpha and the existing 80-byte GPU instance ABI.
 - Added `docs/TOOLENGINE_INTEGRATION_GUIDE.md` with host ownership boundaries, RHI/input/ECS integration phases, asset import guidance, and MVP acceptance criteria.
 - Added stateless validated keyframe timeline sampling; host-owned playback and ECS application remain explicit integration points.
+- Added host-clock-driven timeline playback controls for play, pause, stop, seek, and looping.
 - Added host-agnostic multi-pointer frame routing with isolated capture/hover state, deterministic cancellation for omitted pointers, and duplicate-frame/input validation.
+- Added SDL3 finger down/motion/up/cancel translation into logical pointer snapshots, including synthesized touch-mouse filtering and simultaneous-contact tests.
 - Added the `fotos/LOGO.png` image to the visualizer's featured-ad card through an optional Windows Imaging Component PNG loader; headless tests assert the image pixels render.
 - Added a public API reference entry page and an optional Doxygen generation target (`SPRITEUI_BUILD_DOCS`).
 

@@ -175,8 +175,9 @@ bool ToonTimeline::AddTrack(TimelineTrack track) {
         previousTime = keyframe.time;
     }
 
-    duration_ = std::max(duration_, track.keyframes.back().time);
+    const float trackDuration = track.keyframes.back().time;
     tracks_.push_back(std::move(track));
+    duration_ = std::max(duration_, trackDuration);
     return true;
 }
 
@@ -222,6 +223,59 @@ std::vector<TimelineSample> ToonTimeline::Sample(float time) const {
         samples.push_back({track.target, track.property, Lerp(from.value, to.value, eased)});
     }
     return samples;
+}
+
+bool ToonTimelinePlayer::Seek(float time, const ToonTimeline& timeline) noexcept {
+    if (!IsFinite(time) || !IsFinite(timeline.Duration()) || timeline.Duration() < 0.0f) {
+        return false;
+    }
+
+    const float duration = timeline.Duration();
+    if (looping_ && duration > 0.0f && time > duration) {
+        time_ = std::fmod(time, duration);
+    } else {
+        time_ = std::clamp(time, 0.0f, duration);
+    }
+    return true;
+}
+
+bool ToonTimelinePlayer::Update(
+    float deltaTime,
+    const ToonTimeline& timeline,
+    std::vector<TimelineSample>& samples) {
+    const float duration = timeline.Duration();
+    if (!IsFinite(deltaTime) || deltaTime < 0.0f ||
+        !IsFinite(duration) || duration < 0.0f) {
+        return false;
+    }
+
+    float nextTime = time_;
+    TimelinePlaybackState nextState = state_;
+    if (state_ == TimelinePlaybackState::Playing) {
+        if (duration == 0.0f) {
+            nextTime = 0.0f;
+            nextState = TimelinePlaybackState::Stopped;
+        } else {
+            const double advanced = static_cast<double>(time_) +
+                                    static_cast<double>(deltaTime);
+            if (looping_) {
+                nextTime = static_cast<float>(advanced > duration
+                    ? std::fmod(advanced, static_cast<double>(duration))
+                    : advanced);
+            } else if (advanced >= duration) {
+                nextTime = duration;
+                nextState = TimelinePlaybackState::Stopped;
+            } else {
+                nextTime = static_cast<float>(advanced);
+            }
+        }
+    }
+
+    std::vector<TimelineSample> nextSamples = timeline.Sample(nextTime);
+    time_ = nextTime;
+    state_ = nextState;
+    samples = std::move(nextSamples);
+    return true;
 }
 
 } // namespace ToolEngine::SpriteUi::Animation

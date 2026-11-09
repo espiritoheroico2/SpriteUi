@@ -44,7 +44,7 @@ SpriteUI não depende de Dear ImGui. A remoção do ImGui do editor da ToolEngin
 | Flexbox | Wrap, `alignContent`, baseline, `justifyContent` e grow/shrink com limites implementados; não cobre toda a especificação CSS |
 | Adaptador para o ECS próprio da ToolEngine | Pendente; não adicionar Flecs para essa integração |
 | Backend via RHI da ToolEngine, buffers reais e sincronização | Pendente; a interface atual do RHI precisa expor capacidades usadas pelo shader SpriteUI |
-| SDL3 | Wrapper opcional, mouse/foco, navegação por teclado/gamepad, entrada de texto/IME e clipboard; o adaptador SDL3 ainda não converte eventos touch/finger em snapshots |
+| SDL3 | Wrapper opcional, mouse/foco, touch/finger multi-pointer, navegação por teclado/gamepad, entrada de texto/IME e clipboard; GLFW pendente |
 | GLFW | Pendente |
 | Widgets visuais (desenho), drag & drop de docking | Pendente (lógica de widgets, janelas, abas e dock tree implementada) |
 | HarfBuzz, FreeType e atlas MSDF de produção | Pendente (layout geométrico, caret e quebra de linha por palavra no subconjunto implementado) |

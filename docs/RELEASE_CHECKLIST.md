@@ -6,7 +6,7 @@ Legenda: ✅ feito **e verificado** neste ambiente · 🟡 feito, **não verific
 ⬜ pendente · ⛔ bloqueia a publicação.
 
 **Ambiente verificado nesta rodada:** Windows, MSVC, CMake Debug, build de `spriteui_tests` e
-`spriteui_visualizer`, teste core (**744 checks**) e CTest (5/5, incluindo snapshot, SDL3 e pacote
+`spriteui_visualizer`, teste core (**787 checks**) e CTest (5/5, incluindo snapshot, SDL3 e pacote
 consumidor). O benchmark CPU também foi executado localmente nas duas configurações. O adaptador
 SDL3 e o pacote instalado passaram com SDL 3.2.30. Nesta continuação, os shaders VS/PS foram
 recompilados após a correção do cálculo de cobertura MSDF, e CTest passou (2/2).
@@ -55,13 +55,14 @@ o workspace (aprox. 312 MiB); os fontes e imagens de referência versionáveis f
 | ✅ | Fade de botão com ToonMotion e opacidade em item | Tween `Opacity` conectado ao botão flutuante; extração testa alpha/RGB premultiplicados, clamp e rejeição de NaN |
 | ✅ | Referência de ícone em atlas | `UIIcon` valida slice/UV/tamanho e cria `UIRenderItem`; teste confere UV/slice no pacote; decodificação SVG/raster e upload pertencem ao pipeline da engine |
 | ✅ | Guia de integração ToolEngine | `docs/TOOLENGINE_INTEGRATION_GUIDE.md` cobre ownership, input, ECS, RHI, assets, migração gradual e aceite do MVP; interfaces concretas ainda exigem o checkout da engine |
-| 🟡 | Imagem de anúncio no visualizador | `fotos/LOGO.png` carregada por WIC, desenhada via `UIIcon`; build e teste headless verificam os pixels; Windows-only, não é decoder do core |
+| ✅ | Imagem de anúncio no visualizador | `fotos/LOGO.png` carregada por WIC, desenhada via `UIIcon`; build e teste headless verificam os pixels; Windows-only, não é decoder do core |
 | ✅ | Timeline stateless por keyframes | `ToonTimeline` valida keyframes, easing, limites temporais e duração; playback/loop e ECS permanecem no host |
 | ✅ | Roteamento multi-pointer no core | Snapshots multi-pointer, captura independente, rejeição de IDs duplicados e cancelamento de ponteiros ausentes cobertos por teste |
+| ✅ | SDL3 touch/finger | Down/motion/up/cancel, múltiplos contatos, conversão a coordenadas lógicas e filtro de mouse sintetizado testados com SDL 3.2.30 |
 | 🟡 | Referência de API / Doxygen | Página de referência e target opcional configurados; não foi possível gerar HTML, pois Doxygen não está instalado |
 
 ### Mudanças de comportamento: nenhuma quebra de API
-Todas as APIs existentes mantêm o comportamento; o executável reportou 727 checks aprovados. O que
+Todas as APIs existentes mantêm o comportamento; o executável reportou 787 checks aprovados. O que
 poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCaretRect`,
 `FindInsertionOffset`, `LayoutText(utf8, ...)`) e as versões antigas ficaram documentadas como legado.
 **Decisão sua pendente:** quando marcar as antigas como `[[deprecated]]`.
@@ -108,7 +109,7 @@ poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCare
 | # | Documento | Código | Ação |
 |---|---|---|---|
 | 1 | A especificação sugere ordenar por material | `RenderExtractor` ordena por `(layer, zOrder, paintOrder)` e só agrupa itens adjacentes | Preservar a ordem visual do código; atualizar a especificação antes de tratá-la como contrato de batching |
-| 2 | Matriz de QA e quantidades por categoria são históricas e inconsistentes | A execução atual reporta 727 checks totais; não foi validada uma contagem por categoria | Não publicar números por suíte sem recalcular a matriz |
+| 2 | Matriz de QA e quantidades por categoria são históricas e inconsistentes | A execução atual reporta 787 checks totais; não foi validada uma contagem por categoria | Não publicar números por suíte sem recalcular a matriz |
 | 3 | Estado antigo diz que Flex wrap, quebra por palavra e Nine-Slice não existem | Essas capacidades e testes estão no código atual | Estado atualizado neste checklist; manter os documentos de arquitetura sincronizados |
 | 4 | Alegações de integração HarfBuzz/FreeType e validação em múltiplas toolchains | Shaper de debug existe; integração real de fontes pendente. MSVC/DXC foram verificados; Clang/GCC não nesta rodada | Distinguir código auxiliar de integração de produção e registrar a toolchain usada |
 | 5 | Contratos de SDF e exemplos de input/animação diferem do código atual | Implementações de referência estão em `PanelSdf`, `InputRouter` e `ToonMotion` | Revisar os exemplos e fórmulas normativos antes de uma nova versão da especificação |
@@ -139,5 +140,5 @@ poderia ser "corrigido" foi **adicionado ao lado** (`GetLatestSamples`, `GetCare
 g++ -std=c++20 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
     -fsanitize=address,undefined -fno-sanitize-recover=all -Iinclude -Itests -Itests/Legacy \
     $(find src -name '*.cpp') tests/*.cpp tests/Legacy/LegacyLayout.cpp -o spriteui_tests
-SPRITEUI_SNAPSHOT_DIR=snapshots ./spriteui_tests     # escreve os PNGs e imprime "All 727 checks passed."
+SPRITEUI_SNAPSHOT_DIR=snapshots ./spriteui_tests     # escreve os PNGs e imprime "All 787 checks passed."
 ```

@@ -41,8 +41,10 @@ renderer is a test/reference renderer, not a production GPU backend.
 Multi-pointer routing is host-platform agnostic. It expects one snapshot per currently active
 pointer each frame, all sharing that frame ID. Omitted pointers are cancelled and removed; duplicate
 pointer IDs reject the frame. Hover/capture/focus state is tracked per pointer, so the host must
-define which pointer is allowed to own keyboard focus. The current SDL3 adapter still emits mouse
-snapshots only; touch-to-snapshot translation is not yet implemented.
+define which pointer is allowed to own keyboard focus. The SDL3 adapter's `BuildPointerSnapshots`
+translates mouse and active finger contacts, assigns per-contact pointer IDs, and marks cancelled
+fingers without manufacturing clicks. Applications that keep using the legacy `BuildSnapshot`
+continue to receive mouse-only input.
 
 ## Rendering and alpha
 
@@ -60,9 +62,10 @@ snapshots only; touch-to-snapshot translation is not yet implemented.
 ## Animation
 
 `Animation::ToonMotionSystem` advances runtime tweens and reports samples/completions. The host
-applies samples to ECS/components. `Animation::ToonTimeline` is a stateless keyframe sampler: add
-validated tracks, call `Sample(time)` from the host-owned clock, and apply the returned values.
-Playback, looping, editor controls, persistence, and ECS writes remain host responsibilities.
+applies samples to ECS/components. `Animation::ToonTimeline` stores validated tracks and samples values at a requested time.
+`Animation::ToonTimelinePlayer` adds host-driven play, pause, stop, seek, and optional looping;
+call `Update(deltaTime, timeline, samples)` and apply the returned values. The host still owns the
+clock source, editor controls, persistence, and ECS writes.
 
 ## Build and tests
 

@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 
 #include <cstdio>
+#include <algorithm>
 #include <utility>
 
 namespace {
@@ -167,6 +168,115 @@ bool TestTextInputEvents(SDL_Window* window) {
     return true;
 }
 
+bool TestTouchPointerEvents(SDL_Window* window) {
+    using ToolEngine::SpriteUi::Input::UIInputSnapshot;
+
+    SDL3InputAdapter adapter(window);
+    const Uint32 windowId = SDL_GetWindowID(window);
+    SDL_Event event{};
+    event.type = SDL_EVENT_WINDOW_FOCUS_GAINED;
+    event.window.windowID = windowId;
+    if (!Check(adapter.ProcessEvent(event), "touch adapter window should gain focus")) return false;
+
+    event = {};
+    event.type = SDL_EVENT_FINGER_DOWN;
+    event.tfinger.windowID = windowId;
+    event.tfinger.touchID = 10;
+    event.tfinger.fingerID = 100;
+    event.tfinger.x = 0.25f;
+    event.tfinger.y = 0.5f;
+    if (!Check(adapter.ProcessEvent(event), "first finger down should be accepted")) return false;
+    auto snapshots = adapter.BuildPointerSnapshots(1);
+    if (!Check(snapshots.size() == 2, "mouse and one finger should produce two snapshots")) return false;
+    const auto first = std::find_if(snapshots.begin(), snapshots.end(),
+        [](const UIInputSnapshot& snapshot) { return snapshot.pointerId >= 0x80000000u; });
+    if (!Check(first != snapshots.end() && first->primaryDown && first->primaryPressed &&
+                   first->pointerPositionLogical.x == 24.0f &&
+                   first->pointerPositionLogical.y == 24.0f,
+               "finger snapshot should carry logical position and down edge")) return false;
+    const std::uint32_t firstPointerId = first->pointerId;
+
+    event = {};
+    event.type = SDL_EVENT_FINGER_DOWN;
+    event.tfinger.windowID = windowId;
+    event.tfinger.touchID = 10;
+    event.tfinger.fingerID = 101;
+    event.tfinger.x = 0.75f;
+    event.tfinger.y = 0.25f;
+    if (!Check(adapter.ProcessEvent(event), "second concurrent finger should be accepted")) return false;
+    snapshots = adapter.BuildPointerSnapshots(2);
+    if (!Check(snapshots.size() == 3, "two fingers and mouse should produce three snapshots")) return false;
+    const auto second = std::find_if(snapshots.begin(), snapshots.end(),
+        [firstPointerId](const UIInputSnapshot& snapshot) {
+            return snapshot.pointerId >= 0x80000000u && snapshot.pointerId != firstPointerId;
+        });
+    if (!Check(second != snapshots.end() && second->primaryDown && second->primaryPressed,
+               "second finger should have an independent pointer ID")) return false;
+    const std::uint32_t secondPointerId = second->pointerId;
+
+    event = {};
+    event.type = SDL_EVENT_FINGER_MOTION;
+    event.tfinger.windowID = windowId;
+    event.tfinger.touchID = 10;
+    event.tfinger.fingerID = 100;
+    event.tfinger.x = 0.5f;
+    event.tfinger.y = 0.5f;
+    event.tfinger.dx = 0.25f;
+    if (!Check(adapter.ProcessEvent(event), "finger motion should be accepted")) return false;
+
+    event = {};
+    event.type = SDL_EVENT_FINGER_UP;
+    event.tfinger.windowID = windowId;
+    event.tfinger.touchID = 10;
+    event.tfinger.fingerID = 101;
+    event.tfinger.x = 0.75f;
+    event.tfinger.y = 0.25f;
+    if (!Check(adapter.ProcessEvent(event), "finger up should be accepted")) return false;
+    snapshots = adapter.BuildPointerSnapshots(3);
+    const auto moved = std::find_if(snapshots.begin(), snapshots.end(),
+        [firstPointerId](const UIInputSnapshot& snapshot) {
+            return snapshot.pointerId == firstPointerId;
+        });
+    const auto released = std::find_if(snapshots.begin(), snapshots.end(),
+        [secondPointerId](const UIInputSnapshot& snapshot) {
+            return snapshot.pointerId == secondPointerId;
+        });
+    if (!Check(moved != snapshots.end() && moved->primaryDown &&
+                   moved->pointerPositionLogical.x == 48.0f &&
+                   moved->pointerDeltaLogical.x == 24.0f,
+               "finger motion should convert normalized position/delta to logical pixels")) return false;
+    if (!Check(released != snapshots.end() && released->primaryReleased &&
+                   !released->primaryDown,
+               "finger-up should emit a release snapshot")) return false;
+
+    event = {};
+    event.type = SDL_EVENT_FINGER_CANCELED;
+    event.tfinger.windowID = windowId;
+    event.tfinger.touchID = 10;
+    event.tfinger.fingerID = 100;
+    event.tfinger.x = 0.5f;
+    event.tfinger.y = 0.5f;
+    if (!Check(adapter.ProcessEvent(event), "finger cancellation should be accepted")) return false;
+    snapshots = adapter.BuildPointerSnapshots(4);
+    const auto cancelled = std::find_if(snapshots.begin(), snapshots.end(),
+        [firstPointerId](const UIInputSnapshot& snapshot) {
+            return snapshot.pointerId == firstPointerId;
+        });
+    if (!Check(cancelled != snapshots.end() && cancelled->pointerCancelled &&
+                   !cancelled->primaryDown && !cancelled->primaryReleased,
+               "finger cancellation must cancel rather than synthesize a click")) return false;
+    if (!Check(adapter.BuildPointerSnapshots(5).size() == 1,
+               "ended finger contacts should be removed after their final snapshot")) return false;
+
+    event = {};
+    event.type = SDL_EVENT_MOUSE_MOTION;
+    event.motion.windowID = windowId;
+    event.motion.which = SDL_TOUCH_MOUSEID;
+    if (!Check(!adapter.ProcessEvent(event),
+               "touch-generated mouse motion should not duplicate finger input")) return false;
+    return true;
+}
+
 int TestClipboard() {
     const bool hadPreviousText = SDL3InputAdapter::HasClipboardText();
     std::string previousText;
@@ -250,6 +360,8 @@ int TestWindowLifecycle() {
                "navigation events should pass with the managed SDL window")) return 1;
     if (!Check(TestTextInputEvents(window.GetNativeHandle()),
                "text input events should pass with the managed SDL window")) return 1;
+    if (!Check(TestTouchPointerEvents(window.GetNativeHandle()),
+               "touch pointer events should be translated to frame snapshots")) return 1;
     return 0;
 }
 

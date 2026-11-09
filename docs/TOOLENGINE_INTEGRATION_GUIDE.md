@@ -25,7 +25,7 @@ implementar os adaptadores.
 |---|---|---|
 | Core C++20 | Layout, widgets lógicos, input, texto geométrico, `RenderExtractor` e `FramePacket` existem | Incluir o core como subdiretório/target ou pacote; manter opções de backend desligadas |
 | ECS | Não existe adaptador para as entidades da ToolEngine | Definir ownership e mapeamento de handles; sincronizar componentes sem duplicar o estado de janela |
-| Input | Adaptador SDL3 standalone existe; `UIMultiPointerEventRouter` consome snapshots de vários ponteiros | Encaminhar eventos durante o pump do host ou montar snapshots (um por ponteiro); não fazer um segundo pump; touch/finger SDL ainda precisa do adaptador |
+| Input | Adaptador SDL3 traduz mouse e fingers; `UIMultiPointerEventRouter` consome snapshots multi-pointer | Encaminhar eventos durante o pump do host ou montar snapshots (um por ponteiro); não fazer um segundo pump; definir política de foco de teclado entre ponteiros |
 | RHI | `IRenderBackend` e shader de referência existem; não há backend RHI ToolEngine | Resolver upload de instâncias, binding de atlas/sampler, clips, desenho instanciado e fences |
 | Texturas e ícones | O frame referencia `textureSlice`; o SpriteUI não decodifica arquivos de imagem | Usar o pipeline de assets da engine para carregar, converter e manter texturas |
 | Fonts | Layout e contratos de glifos existem; o rasterizador GDI pertence somente ao visualizador Windows | Escolher FreeType/HarfBuzz ou o pipeline já usado pela engine e fornecer atlas persistente |
