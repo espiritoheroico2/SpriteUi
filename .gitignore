@@ -18,3 +18,6 @@
 /.cache/
 compile_commands.json
 /Testing/
+
+# Screenshots written by the visual tests (reference copies live in docs/img)
+snapshots/

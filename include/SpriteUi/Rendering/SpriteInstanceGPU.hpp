@@ -10,7 +10,7 @@ namespace ToolEngine::SpriteUi::Rendering {
 
 struct alignas(16) SpriteInstanceGPU final {
     float transformRow0[4]{}; // m00, m01, tx, depth
-    float transformRow1[4]{}; // m10, m11, ty, reserved
+    float transformRow1[4]{}; // m10, m11, ty, cornerRadius (px, FlagRoundedPanel only)
     float uvRect[4]{};        // u, v, width, height
     float tint[4]{};          // linear premultiplied RGBA
     std::uint32_t resourceIds[4]{}; // textureSlice, materialIndex, clipIndex, flags
