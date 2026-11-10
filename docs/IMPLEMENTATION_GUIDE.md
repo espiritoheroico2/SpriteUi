@@ -74,7 +74,7 @@ Cada camada tem um critério objetivo. "Passando" significa que o comando indica
 | **L0 Núcleo** | Layout, Flex, roteamento de eventos, texto (medidas e quebra), docking (modelo) | `ctest` no pacote (`SpriteUI.CoreTests`) | **Passando: 819 verificações** | Base de tudo |
 | **L1 Texto (atlas)** | Atlas stb_truetype: cobertura, geometria do 'A', espaço sem área, clusters UTF-8, '?' de fallback, tab, controles, rejeição de entrada inválida, quebra de linha | `SpriteUI.TruetypeAtlas` (`SPRITEUI_WITH_TEXT_STB=ON`) | **Passando: 55/55** | Texto ruim |
 | **L2 Docking (modelo)** | Dividir nós, abas, soltar no centro, limites de divisão | `tests/test_main.cpp` (`TestTabsAndDocking`, testes de `UIDockNode`) | **Passando (parte do L0)** | Docking mal feito |
-| **L3 Docking (interação)** | Arrastar janela para zona, trocar aba, janela não sai do dock sem arrasto, janela fica na tela | Ainda não existe | **Pendente** | Janelas bugando |
+| **L3 Docking (interação)** | Arrasto com limiar, zonas de soltura (borda = dividir, centro = aba, fora = flutuar), cancelamento, sem movimento sem entrada, janela presa na tela | `SpriteUI.DockInteraction` (`tests/test_dock_interaction.cpp`) | **Passando: 38/38** no controlador. Ainda não testado com janelas reais nem ligado ao editor | Janelas bugando |
 | **L4 Campo de texto** | Caret, seleção, inserir/apagar, Ctrl+C/V/X, Undo, texto persiste por N quadros sem entrada | Ainda não existe | **Pendente** | Campos apagando sozinho |
 | **L5 Backend RHI (contrato)** | Pipeline e chamadas corretas sobre o dispositivo Null: lotes, recorte de área zero, ordem de uso, rejeição de estado inválido, cantos arredondados | `tool_tests` (`spriteui_rhi_*`, 4 testes) na engine | **Passando: 4/4** (dentro de 154/154) | Base de render |
 | **L6 Pixels GPU** | Sólido, recorte, blend premultiplicado, glifo com cobertura 255 e 128, fora do quad, fundo | `spriteui_gpu_test opengl` e `spriteui_gpu_test vulkan` (engine) | **Passando em OpenGL (Mesa) e Vulkan (lavapipe)** | Interface feia (base de cor e blend) |
@@ -111,14 +111,16 @@ Cada fase tem um critério de aceitação. Não avance sem ele.
       passa L5 e L6. **Ok** (GL e Vulkan).
 - [x] Recorte e blend corretos sob GL e Vulkan. Critério: L6. **Ok.**
 
-### Fase B: janelas e docking (pendente)
+### Fase B: janelas e docking (controlador pronto; integração pendente)
 Passos:
-1. Criar um `DockInteractionController` que recebe eventos do `UIEventRouter` (pressionar, arrastar, soltar) e devolve
-   a ação (`Dock`, `Tab`, `Float`, `None`). Sem renderizar.
-2. Definir zonas de soltura (esquerda, direita, topo, base, centro) com tamanho mínimo e tolerância.
-3. Regra: janela só muda de lugar com arrasto explícito. Nenhuma operação redocka tudo sozinha.
-4. Regra: janela flutuante é mantida dentro da tela (`keepFloatingWindowsOnScreen`) ao redimensionar.
-Critério (L3): roteiro de arrastes em script gera a árvore esperada. Sem arrasto, a árvore não muda por 1000 quadros.
+1. [x] `DockDragController` (`include/SpriteUi/Widgets/DockInteraction.hpp`): recebe pressionar, mover, soltar e
+   cancelar; devolve `None`, `Dock`, `Tab` ou `Float`. Não renderiza nem altera a árvore.
+2. [x] Zonas de soltura por fração da borda (`ComputeDropSlot`, padrão 25%); centro vira aba.
+3. [x] Regra: só há ação com arrasto que passou do limiar (6 px). Clique e tremor não fazem nada.
+4. [x] `ClampWindowToScreen` mantém a janela flutuante na tela e reduz o tamanho se ela for maior que a tela.
+5. [ ] Ligar o controlador ao `UIEventRouter` e à árvore de docking, aplicando a ação devolvida.
+6. [ ] Testes com janelas reais (SDL ou Xvfb): arrastar, soltar, redimensionar, trocar aba.
+Critério (L3): o item 5 e o 6 precisam passar. Hoje só o controlador (itens 1 a 4) está provado.
 
 ### Fase C: campo de texto (pendente)
 Passos:

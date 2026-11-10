@@ -27,6 +27,7 @@ add_library(SpriteUI
     src/Widgets/Widgets.cpp
     src/Widgets/VirtualList.cpp
     src/Widgets/Docking.cpp
+    src/Widgets/DockInteraction.cpp
     src/Widgets/Graphs.cpp
     src/Widgets/Popup.cpp
     src/Config/UIConfig.cpp
@@ -223,6 +224,11 @@ if(SPRITEUI_BUILD_TESTS)
     )
     target_include_directories(spriteui_tests PRIVATE tests tests/Legacy)
     target_link_libraries(spriteui_tests PRIVATE SpriteUi::SpriteUI)
+    # Camada L3 (docking, interacao): roteiros de eventos do ponteiro.
+    add_executable(spriteui_dock_tests tests/test_dock_interaction.cpp)
+    target_link_libraries(spriteui_dock_tests PRIVATE SpriteUi::SpriteUI)
+    add_test(NAME SpriteUI.DockInteraction COMMAND spriteui_dock_tests)
+
     if(SPRITEUI_WITH_TEXT_STB)
         add_executable(spriteui_truetype_tests tests/test_truetype_atlas.cpp)
         target_link_libraries(spriteui_truetype_tests PRIVATE SpriteUi::TextStb)
