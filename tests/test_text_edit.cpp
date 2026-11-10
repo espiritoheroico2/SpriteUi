@@ -122,6 +122,18 @@ void TestHomeAndEndWithSelection() {
     CHECK(e.Caret() == 4);
 }
 
+void TestMoveCaretToSnapsToCodepointBoundary() {
+    current = "TestMoveCaretToSnapsToCodepointBoundary";
+    TextEditState e("aéb");          // 'é' ocupa os bytes 1 e 2
+    e.MoveCaretTo(2);                // meio do 'é': recua para o inicio dele
+    CHECK(e.Caret() == 1);
+    e.MoveCaretTo(99);               // fora do texto: vai para o fim
+    CHECK(e.Caret() == 4);
+    e.MoveCaretTo(0, true);          // Shift+clique: estende a selecao ate o inicio
+    CHECK(e.HasSelection());
+    CHECK(e.SelectedText() == "aéb");
+}
+
 void TestTextIsNeverChangedByReadingOrIdleFrames() {
     current = "TestTextIsNeverChangedByReadingOrIdleFrames";
     // Regressao do bug "campo apagando sozinho": so operacoes explicitas mudam o texto. Mil quadros de leitura
@@ -155,6 +167,7 @@ int main() {
     TestSelectAllCopyCutPaste();
     TestUndoRestoresPreviousState();
     TestHomeAndEndWithSelection();
+    TestMoveCaretToSnapsToCodepointBoundary();
     TestTextIsNeverChangedByReadingOrIdleFrames();
     std::printf("text edit: %d/%d checks passed\n", run - failed, run);
     return failed == 0 ? 0 : 1;

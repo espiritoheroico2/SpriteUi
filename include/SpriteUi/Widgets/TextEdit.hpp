@@ -47,6 +47,10 @@ public:
     void MoveEnd(bool extend = false) noexcept;
     void SelectAll() noexcept;
 
+    // Caret por offset de byte (ex.: clique no texto). Offsets no meio de um codepoint recuam ate a
+    // fronteira; offsets fora do texto vao para o limite. `extend` = true estende a selecao.
+    void MoveCaretTo(std::size_t byteOffset, bool extend = false) noexcept;
+
     // Limite de pontos de desfazer guardados.
     static constexpr std::size_t kMaxUndo = 256;
 
