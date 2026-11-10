@@ -519,10 +519,13 @@ std::vector<Rendering::UIRenderItem> GenerateTextRenderItems(
         item.transform.pivot = {0.0f, 0.0f};
         item.transform.scale = {1.0f, 1.0f};
 
+        // O atlas de glifos guarda uvRect como [u0, v0, u1, v1] (TruetypeAtlas.hpp). O item de desenho usa
+        // [u, v, largura, altura] (SpriteInstanceGPU.hpp). Sem a conversao, cada glifo amostrava a regiao errada.
+        // DebugShaper usa origem (0, 0), entao o resultado dele nao muda.
         item.uvRect[0] = quad.uvRect[0];
         item.uvRect[1] = quad.uvRect[1];
-        item.uvRect[2] = quad.uvRect[2];
-        item.uvRect[3] = quad.uvRect[3];
+        item.uvRect[2] = quad.uvRect[2] - quad.uvRect[0];
+        item.uvRect[3] = quad.uvRect[3] - quad.uvRect[1];
 
         item.tintPremultipliedLinear = colorPremultiplied;
         item.textureSlice = atlasTextureSlice;

@@ -207,6 +207,30 @@ void TestWordWrapUsesAtlasMetrics() {
 
 } // namespace
 
+// Regressao: o item de desenho recebe [u, v, largura, altura]. O atlas guarda [u0, v0, u1, v1].
+void TestTextRenderItemUsesWidthHeightUv() {
+    g_current = "TestTextRenderItemUsesWidthHeightUv";
+    TruetypeAtlas atlas;
+    CHECK(BuildDefault(atlas));
+    const auto shaped = ShapeTruetype("M", atlas);
+    CHECK(shaped.size() == 1);
+    const auto& g = atlas.glyphs.at('M');
+    TextLayoutConfig cfg;
+    cfg.fontSize = 15.0f;
+    const auto layout = LayoutText(std::string_view("M"), shaped, atlas.metrics, cfg);
+    CHECK(!layout.quads.empty());
+    UILayoutRect box;
+    box.resolvedSize = {100.0f, 20.0f};
+    const auto items = GenerateTextRenderItems(layout, box, {1.0f, 1.0f, 1.0f, 1.0f}, 1u);
+    CHECK(items.size() == 1);
+    if (items.size() != 1) return;
+    const auto& uv = items[0].uvRect;
+    CHECK(std::fabs(uv[0] - g.uvRect[0]) < 1e-6f);
+    CHECK(std::fabs(uv[1] - g.uvRect[1]) < 1e-6f);
+    CHECK(std::fabs(uv[2] - (g.uvRect[2] - g.uvRect[0])) < 1e-6f);   // largura, nao u1
+    CHECK(std::fabs(uv[3] - (g.uvRect[3] - g.uvRect[1])) < 1e-6f);   // altura, nao v1
+}
+
 int main() {
     TestAtlasBuildsAndHasCoverage();
     TestLetterGeometry();
@@ -216,6 +240,7 @@ int main() {
     TestInvalidUtf8BecomesReplacement();
     TestTabAndControls();
     TestRejectsBadInput();
+    TestTextRenderItemUsesWidthHeightUv();
     TestOverflowReturnsFalseAndEmptiesOutput();
     TestWordWrapUsesAtlasMetrics();
 
