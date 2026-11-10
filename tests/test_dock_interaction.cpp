@@ -2,6 +2,7 @@
 // Executavel proprio, sem o harness principal.
 
 #include "SpriteUi/Widgets/DockInteraction.hpp"
+#include "SpriteUi/Widgets/DockOps.hpp"
 
 #include <array>
 #include <cstdio>
@@ -147,6 +148,85 @@ void TestClampKeepsWindowOnScreen() {
     CHECK(inside.position.x == 30.0f && inside.position.y == 20.0f);
 }
 
+
+// Arvore de docking: folhas A, B, W e C (ids de conteudo).
+const UIHandle kA{1, 1}, kB{2, 1}, kW{3, 1}, kC{4, 1};
+const Rect kScreen{{0, 0}, {200, 100}};
+
+void TestDockLeftOfRightLeafPlacesWindowLeft() {
+    current = "TestDockLeftOfRightLeafPlacesWindowLeft";
+    UIDockNode root(kA);
+    CHECK(root.Split(DockSlot::Right, 0.5f, kB));
+    DockDropResult drop{DockAction::Dock, DockSlot::Left, kB};
+    CHECK(ApplyDropResult(root, kW, drop));
+    root.Layout(kScreen);
+    const UIDockNode* w = FindLeafContaining(root, kW);
+    const UIDockNode* b = FindLeafContaining(root, kB);
+    const UIDockNode* a = FindLeafContaining(root, kA);
+    CHECK(w && b && a);
+    if (!w || !b || !a) return;
+    CHECK(w->bounds.position.x < b->bounds.position.x);   // W a esquerda de B
+    CHECK(a->bounds.size.x > 0.0f);                        // A continua visivel
+}
+
+void TestTabJoinsLeafAndActivatesWindow() {
+    current = "TestTabJoinsLeafAndActivatesWindow";
+    UIDockNode root(kA);
+    CHECK(ApplyDropResult(root, kW, DockDropResult{DockAction::Tab, DockSlot::None, kA}));
+    CHECK(root.tabs.TabCount() == 2);
+    CHECK(FindLeafContaining(root, kA) == FindLeafContaining(root, kW));
+    CHECK(root.VisibleContent() == kW);                    // a aba nova fica ativa
+}
+
+void TestFloatRemovesAndCollapses() {
+    current = "TestFloatRemovesAndCollapses";
+    UIDockNode root(kA);
+    CHECK(root.Split(DockSlot::Right, 0.5f, kB));
+    CHECK(ApplyDropResult(root, kB, DockDropResult{DockAction::Float, DockSlot::None, {}}));
+    CHECK(FindLeafContaining(root, kB) == nullptr);
+    CHECK(!root.isSplit);                                  // sobrou so A: o pai colapsou
+    CHECK(root.content == kA);
+}
+
+void TestRemovingOneOfTwoTabsKeepsOtherAsContent() {
+    current = "TestRemovingOneOfTwoTabsKeepsOtherAsContent";
+    UIDockNode root(kA);
+    CHECK(ApplyDropResult(root, kW, DockDropResult{DockAction::Tab, DockSlot::None, kA}));
+    CHECK(RemoveFromDock(root, kW));
+    CHECK(root.tabs.TabCount() == 0);
+    CHECK(root.content == kA);
+    CHECK(!RemoveFromDock(root, kW));                      // ja nao esta na arvore
+}
+
+void TestDockOntoTabbedLeafKeepsAllTabs() {
+    current = "TestDockOntoTabbedLeafKeepsAllTabs";
+    UIDockNode root(kA);
+    CHECK(ApplyDropResult(root, kW, DockDropResult{DockAction::Tab, DockSlot::None, kA}));
+    // Alvo: a aba ativa (W). Encaixar C a direita nao pode perder A nem W.
+    CHECK(ApplyDropResult(root, kC, DockDropResult{DockAction::Dock, DockSlot::Right, kW}));
+    CHECK(FindLeafContaining(root, kA) != nullptr);
+    CHECK(FindLeafContaining(root, kW) != nullptr);
+    CHECK(FindLeafContaining(root, kC) != nullptr);
+}
+
+void TestInvalidTargetLeavesTreeUnchanged() {
+    current = "TestInvalidTargetLeavesTreeUnchanged";
+    UIDockNode root(kA);
+    CHECK(!ApplyDropResult(root, kW, DockDropResult{DockAction::Dock, DockSlot::Left, UIHandle{99, 1}}));
+    CHECK(FindLeafContaining(root, kW) == nullptr);        // W nao foi tirado nem colocado
+    CHECK(FindLeafContaining(root, kA) == &root);
+    CHECK(!ApplyDropResult(root, kA, DockDropResult{DockAction::Dock, DockSlot::None, kA}));
+    CHECK(!ApplyDropResult(root, kA, DockDropResult{DockAction::None, DockSlot::None, {}}));
+}
+
+void TestDroppingWindowOntoItsOwnGroupIsIgnored() {
+    current = "TestDroppingWindowOntoItsOwnGroupIsIgnored";
+    UIDockNode root(kA);
+    CHECK(ApplyDropResult(root, kW, DockDropResult{DockAction::Tab, DockSlot::None, kA}));
+    CHECK(!ApplyDropResult(root, kW, DockDropResult{DockAction::Tab, DockSlot::None, kW}));
+    CHECK(root.tabs.TabCount() == 2);                      // nada mudou
+}
+
 } // namespace
 
 int main() {
@@ -160,6 +240,13 @@ int main() {
     TestNoSpontaneousMovementWithoutInput();
     TestGestureResetsAfterRelease();
     TestClampKeepsWindowOnScreen();
+    TestDockLeftOfRightLeafPlacesWindowLeft();
+    TestTabJoinsLeafAndActivatesWindow();
+    TestFloatRemovesAndCollapses();
+    TestRemovingOneOfTwoTabsKeepsOtherAsContent();
+    TestDockOntoTabbedLeafKeepsAllTabs();
+    TestInvalidTargetLeavesTreeUnchanged();
+    TestDroppingWindowOntoItsOwnGroupIsIgnored();
     std::printf("dock interaction: %d/%d checks passed\n", run - failed, run);
     return failed == 0 ? 0 : 1;
 }

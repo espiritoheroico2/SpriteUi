@@ -28,6 +28,7 @@ add_library(SpriteUI
     src/Widgets/VirtualList.cpp
     src/Widgets/Docking.cpp
     src/Widgets/DockInteraction.cpp
+    src/Widgets/DockOps.cpp
     src/Widgets/Graphs.cpp
     src/Widgets/Popup.cpp
     src/Config/UIConfig.cpp
