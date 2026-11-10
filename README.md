@@ -43,11 +43,11 @@ SpriteUI não depende de Dear ImGui. A remoção do ImGui do editor da ToolEngin
 |---|---|
 | Flexbox | Wrap, `alignContent`, baseline, `justifyContent` e grow/shrink com limites implementados; não cobre toda a especificação CSS |
 | Adaptador para o ECS próprio da ToolEngine | Pendente; não adicionar Flecs para essa integração |
-| Backend via RHI da ToolEngine, buffers reais e sincronização | Pendente; a interface atual do RHI precisa expor capacidades usadas pelo shader SpriteUI |
+| Backend via RHI da ToolEngine | Implementado no repositório da engine (módulo `ui_sprite`, opcional). Limites: atlas único em alfa, sem SDF/MSDF real, validado em OpenGL; Vulkan e D3D12 ainda sem teste de pixels |
 | SDL3 | Wrapper opcional, mouse/foco, touch/finger multi-pointer, navegação por teclado/gamepad, entrada de texto/IME e clipboard; GLFW pendente |
 | GLFW | Pendente |
 | Widgets visuais (desenho), drag & drop de docking | Pendente (lógica de widgets, janelas, abas e dock tree implementada) |
-| HarfBuzz, FreeType e atlas MSDF de produção | Pendente (layout geométrico, caret e quebra de linha por palavra no subconjunto implementado) |
+| HarfBuzz, FreeType e atlas MSDF de produção | Pendente. Há um atlas stb_truetype opcional (alfa, sem kerning; ver abaixo) |
 | Playback/looping de timeline, editor de keyframes e integração ECS | Pendente; a amostragem stateless de keyframes está implementada |
 | KTX2/Basis, streaming e eviction por fences | Pendente |
 | Light Prism ClusterLit, Bloom, Acrylic Blur e sombras | Pendente |
@@ -161,6 +161,20 @@ if (Platform::SDL3InputAdapter::GetClipboardText(clipboardText)) {
 
 O comando de navegação é consumido uma vez por chamada; se vários comandos chegarem antes do consumo, o primeiro é preservado. Teclas repetidas são tratadas, mas não repetem ações. `ConsumeCommittedText()` retorna o texto UTF-8 confirmado desde a última leitura; `GetTextComposition()` fornece o texto de composição IME ativo e seu intervalo de seleção, copiados do evento SDL. O retângulo da área IME usa coordenadas da janela SDL e deve acompanhar o caret. Clipboard é global ao processo/ambiente SDL: `SetClipboardText`, `GetClipboardText` e `HasClipboardText` são estáticos e devem ser chamados na thread principal. As operações retornam `false` em caso de falha; quando a falha vier do SDL, consulte `SDL_GetError()` imediatamente. A escrita rejeita NUL embutido porque a API SDL recebe uma string terminada em NUL. Eventos de teclado/texto de outras janelas são ignorados. Como eventos de gamepad não identificam uma janela, eles são encaminhados somente enquanto a janela associada ao adaptador estiver focada. Os métodos SDL, incluindo criação/destruição e operações de janela, devem ser usados na thread principal. O wrapper possui a janela e a destrói no destrutor; não inicializa nem encerra o subsistema SDL. A aplicação hospedeira continua responsável por `SDL_Init`/`SDL_Quit`. O target de integração é `SpriteUi::SDL3Input`; faça `find_package(SDL3 3.2 CONFIG REQUIRED)` e inclua `<SDL3/SDL.h>` para constantes SDL.
 
+## Atlas de glifos stb_truetype (opcional)
+
+`SpriteUi::TextStb`, ligado com `-DSPRITEUI_WITH_TEXT_STB=ON` (padrão OFF), monta um atlas de cobertura alfa de 8 bits a partir de um TTF/OTF com `BuildTruetypeAtlas`, e converte UTF-8 em `GlyphInstance` com `ShapeTruetype`. Usa a convenção do `DebugShaper` (`unitsPerEm = 1000`, `planeBounds` com y para cima, `uvRect` normalizado).
+
+Limites deste passo: um glifo por codepoint, sem kerning, ligaduras ou marcas combinantes; atlas de rasterização, não SDF/MSDF, então o texto fica serrilhado longe do tamanho rasterizado; uma página só; o pixel (0,0) do atlas fica reservado (padding ≥ 1). O núcleo `SpriteUI` continua sem essa dependência. `stb_truetype` (public domain ou MIT) está em `third_party/stb/`, com nota de procedência. A biblioteca não valida o conteúdo da fonte: carregue apenas fontes confiáveis. Os testes estão em `tests/test_truetype_atlas.cpp` (`SpriteUI.TruetypeAtlas`).
+
+## Backend RHI da ToolEngine (opcional)
+
+Na engine, o módulo header-only `ui_sprite` (`engine/ui_sprite/include/tool/ui/spriteui_rhi.hpp`, ligado com `TOOL_WITH_SPRITEUI`) implementa `IRenderBackend` sobre `tool::rhi::IDevice`. Cada `SpriteInstanceGPU` vira um quad de quatro vértices expandidos na CPU, num único vertex buffer por quadro, na ordem do pacote. Cada trecho com o mesmo recorte vira um `drawIndexedRange` com `setScissor`. O blend é premultiplicado (`ONE`, `INV_SRC_ALPHA`). Os shaders são `assets/shaders/spriteui.hlsl` e, para OpenGL, os GLSL gerados por `tools/shaders/build_glsl.py`.
+
+Para isso o RHI ganhou três extensões: `PipelineDesc::blendPremultiplied`, `ICommandList::setScissor` e `ICommandList::drawIndexedRange(firstIndex, count)`. O Diligent liga o scissor no rasterizador. O dispositivo Null implementa as mesmas operações para os testes sem GPU (`tests/test_spriteui_rhi.cpp`). O teste com GPU é `spriteui_gpu_test` (OpenGL via `xvfb-run`): desenha num alvo offscreen e confere pixels de cor sólida, recorte, blend, glifo com cobertura total e parcial, e fundo.
+
+Limites: um atlas único em alfa (o slice 0 é o branco e qualquer outro slice amostra o atlas); `FlagBitmapText` e `FlagMsdfText` valem como cobertura alfa, sem SDF; cantos arredondados usam o SDF de caixa do SpriteUI com 1 px de anti-aliasing; sem sampler (leitura direta com `Load`).
+
 ## Capturas de referência
 
 Estas imagens são produzidas pelo backend de software dos testes e documentam resultados CPU; não são capturas de uma GPU ou backend de produção.
@@ -259,7 +273,7 @@ O guia incremental e os critérios de aceite estão em [`docs/TOOLENGINE_INTEGRA
 Há dois contratos do host que precisam ser ligados sem concorrer com a infraestrutura existente:
 
 - **Input:** `SdlWindow::pump` já consome a fila SDL. O adaptador SpriteUI pode receber os mesmos `SDL_Event` por um event tap do host, ou o host pode construir `UIInputSnapshot`; não se deve chamar um segundo `SDL_PollEvent`. O `RawInput` atual não carrega posição absoluta do mouse nem texto/IME, então essas informações precisam vir do event tap ou de uma extensão explícita do input da engine.
-- **Renderização:** `FramePacket` e `SpriteInstanceGPU` são a fronteira estável do SpriteUI. O futuro backend deve enviar o pacote através de `tool::rhi::IDevice`/`ICommandList`, sem assumir acesso a objetos privados do Diligent. Na interface atual do RHI, `TextureDesc` não declara camadas de textura, `PipelineDesc::textureNames` descreve `Texture2D` sem sampler, e o buffer estruturado documentado é de leitura no pixel shader; o shader SpriteUI usa `Texture2DArray` com sampler e lê instâncias estruturadas no vertex shader. Também não há parâmetro de base-instance em `drawIndexed`. Portanto, o RHI precisa ganhar capacidades equivalentes (ou o backend/shader deve adotar uma estratégia suportada) antes de prometer renderização SpriteUI eficiente e correta. Não contornar essas lacunas com um segundo backend Diligent paralelo.
+- **Renderização:** `FramePacket` e `SpriteInstanceGPU` continuam sendo a fronteira estável. O backend implementado (`ui_sprite`) expande os quads na CPU e usa `IDevice`/`ICommandList`, sem acesso a objetos privados do Diligent. Por isso não depende de storage buffer no vertex shader, de `Texture2DArray` nem de base-instance: usa vértices expandidos, `drawIndexedRange` (com deslocamento de índice) e um único atlas em `Texture2D` lido com `Load`.
 
 A migração do editor seguirá etapas reversíveis:
 
@@ -323,3 +337,11 @@ tree.Layout({{0,0},{640,480}});
 ```
 
 Este é um subconjunto de Flex: há freeze/re-distribuição para limites, wrap, `justifyContent`, `alignContent` e baseline; não há implementação de todas as regras CSS nem bases intrínsecas complexas. `BuildClipHierarchy` recebe clips em ordem pai-antes-do-filho e retorna interseções efetivas; o índice resultante pode ser atribuído a `UIRenderItem::clipIndex`. Para input, `HitTarget::clipRectLogical` deve receber o clip efetivo em coordenadas lógicas. Veja `docs/IMPLEMENTATION_STATUS.md` para limites e próximos passos.
+
+## Estrutura do pacote
+
+- `include/`, `src/`: núcleo independente (sem dependências obrigatórias).
+- `adapters/toolengine/`: adaptador header-only para o RHI da ToolEngine (`SPRITEUI_WITH_TOOLENGINE_RHI=ON`). Fica fora do núcleo; o consumidor informa o alvo do RHI com `SPRITEUI_TOOLENGINE_RHI_TARGET`.
+- `shaders/toolengine/`: HLSL e GLSL gerados usados pelo adaptador. São cópias do engine (`assets/shaders`): mantenha iguais.
+- `docs/IMPLEMENTATION_GUIDE.md`: guia de implementação e testes por camadas.
+- `docs/THIRD_PARTY.md`: dependências de terceiros, licenças e quando entram.

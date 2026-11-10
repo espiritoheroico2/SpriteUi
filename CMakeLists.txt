@@ -9,6 +9,7 @@ option(SPRITEUI_BUILD_SDL3_ADAPTER "Build the optional SDL3 window-input adapter
 option(SPRITEUI_BUILD_VISUALIZER "Build the interactive SDL3 CPU visualizer" OFF)
 option(SPRITEUI_BUILD_DOCS "Build the Doxygen API reference" OFF)
 option(SPRITEUI_ENABLE_WARNINGS "Enable strict compiler warnings" ON)
+option(SPRITEUI_WITH_TEXT_STB "Build the optional stb_truetype glyph atlas (SpriteUi::TextStb)" OFF)
 
 add_library(SpriteUI
     src/Input/InputRouter.cpp
@@ -88,6 +89,22 @@ if(SPRITEUI_ENABLE_WARNINGS)
     else()
         target_compile_options(SpriteUI PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
     endif()
+endif()
+
+# Atlas de glifos com stb_truetype. Fica num alvo separado para que o nucleo SpriteUI continue sem dependencias.
+if(SPRITEUI_WITH_TEXT_STB)
+    add_library(SpriteUI_TextStb
+        src/Text/TruetypeAtlas.cpp
+    )
+    add_library(SpriteUi::TextStb ALIAS SpriteUI_TextStb)
+    target_compile_features(SpriteUI_TextStb PUBLIC cxx_std_20)
+    target_include_directories(SpriteUI_TextStb
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        PRIVATE
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb>
+    )
+    target_link_libraries(SpriteUI_TextStb PUBLIC SpriteUi::SpriteUI)
 endif()
 
 if(SPRITEUI_BUILD_FUZZERS)
@@ -206,6 +223,14 @@ if(SPRITEUI_BUILD_TESTS)
     )
     target_include_directories(spriteui_tests PRIVATE tests tests/Legacy)
     target_link_libraries(spriteui_tests PRIVATE SpriteUi::SpriteUI)
+    if(SPRITEUI_WITH_TEXT_STB)
+        add_executable(spriteui_truetype_tests tests/test_truetype_atlas.cpp)
+        target_link_libraries(spriteui_truetype_tests PRIVATE SpriteUi::TextStb)
+        target_compile_definitions(spriteui_truetype_tests PRIVATE
+            "SPRITEUI_TEST_FONT_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/Fonts/Xmind/Xmind-VariableFont_wght.ttf\"")
+        add_test(NAME SpriteUI.TruetypeAtlas COMMAND spriteui_truetype_tests)
+    endif()
+
     # Visual tests write PNG screenshots here (also asserted on pixel values).
     add_test(NAME SpriteUI.CoreTests COMMAND spriteui_tests)
     set_tests_properties(SpriteUI.CoreTests PROPERTIES
@@ -306,6 +331,19 @@ if(SPRITEUI_DXC_EXECUTABLE)
     )
 else()
     message(STATUS "DXC not found: HLSL compilation target is skipped")
+endif()
+
+# Adaptador opcional para o RHI da ToolEngine. Header-only; NAO faz parte do nucleo.
+# O consumidor informa o alvo CMake que fornece tool::rhi (padrao: tool_rhi).
+option(SPRITEUI_WITH_TOOLENGINE_RHI "Build the optional ToolEngine RHI adapter (header-only)" OFF)
+set(SPRITEUI_TOOLENGINE_RHI_TARGET "tool_rhi" CACHE STRING "CMake target that provides tool::rhi")
+if(SPRITEUI_WITH_TOOLENGINE_RHI)
+    add_library(SpriteUi_ToolEngineRhi INTERFACE)
+    add_library(SpriteUi::ToolEngineRhi ALIAS SpriteUi_ToolEngineRhi)
+    target_compile_features(SpriteUi_ToolEngineRhi INTERFACE cxx_std_20)
+    target_include_directories(SpriteUi_ToolEngineRhi INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/adapters/toolengine/include>)
+    target_link_libraries(SpriteUi_ToolEngineRhi INTERFACE SpriteUi::SpriteUI ${SPRITEUI_TOOLENGINE_RHI_TARGET})
 endif()
 
 # Padrao de projeto: todo header publico deve compilar sozinho (self-contained).
