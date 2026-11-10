@@ -29,6 +29,7 @@ add_library(SpriteUI
     src/Widgets/Docking.cpp
     src/Widgets/DockInteraction.cpp
     src/Widgets/DockOps.cpp
+    src/Widgets/TextEdit.cpp
     src/Widgets/Graphs.cpp
     src/Widgets/Popup.cpp
     src/Config/UIConfig.cpp
@@ -229,6 +230,11 @@ if(SPRITEUI_BUILD_TESTS)
     add_executable(spriteui_dock_tests tests/test_dock_interaction.cpp)
     target_link_libraries(spriteui_dock_tests PRIVATE SpriteUi::SpriteUI)
     add_test(NAME SpriteUI.DockInteraction COMMAND spriteui_dock_tests)
+
+    # Camada L4 (campo de texto): edicao, selecao, UTF-8, desfazer e persistencia do texto.
+    add_executable(spriteui_text_edit_tests tests/test_text_edit.cpp)
+    target_link_libraries(spriteui_text_edit_tests PRIVATE SpriteUi::SpriteUI)
+    add_test(NAME SpriteUI.TextEdit COMMAND spriteui_text_edit_tests)
 
     if(SPRITEUI_WITH_TEXT_STB)
         add_executable(spriteui_truetype_tests tests/test_truetype_atlas.cpp)

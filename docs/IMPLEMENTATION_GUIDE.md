@@ -75,7 +75,7 @@ Cada camada tem um critério objetivo. "Passando" significa que o comando indica
 | **L1 Texto (atlas)** | Atlas stb_truetype: cobertura, geometria do 'A', espaço sem área, clusters UTF-8, '?' de fallback, tab, controles, rejeição de entrada inválida, quebra de linha | `SpriteUI.TruetypeAtlas` (`SPRITEUI_WITH_TEXT_STB=ON`) | **Passando: 55/55** | Texto ruim |
 | **L2 Docking (modelo)** | Dividir nós, abas, soltar no centro, limites de divisão | `tests/test_main.cpp` (`TestTabsAndDocking`, testes de `UIDockNode`) | **Passando (parte do L0)** | Docking mal feito |
 | **L3 Docking (interação)** | Arrasto com limiar, zonas de soltura (borda = dividir, centro = aba, fora = flutuar), cancelamento, sem movimento sem entrada, janela presa na tela | `SpriteUI.DockInteraction` (`tests/test_dock_interaction.cpp`) | **Passando: 70/70** (controlador e aplicação na árvore). Ainda não testado com janelas reais nem ligado ao editor | Janelas bugando |
-| **L4 Campo de texto** | Caret, seleção, inserir/apagar, Ctrl+C/V/X, Undo, texto persiste por N quadros sem entrada | Ainda não existe | **Pendente** | Campos apagando sozinho |
+| **L4 Campo de texto** | Caret, seleção, inserir/apagar, UTF-8 (apagar 'é' inteiro), Shift+setas, Home/End, Ctrl+A/C/X/V (via operações), Undo, texto persiste por 1000 quadros sem entrada | `SpriteUI.TextEdit` (`tests/test_text_edit.cpp`) | **Passando: 43/43** (modelo `TextEditState`). Ainda não ligado ao `UIEventRouter`, sem renderização do campo, sem clipboard do sistema | Campos apagando sozinho (regra do modelo coberta; integração pendente) |
 | **L5 Backend RHI (contrato)** | Pipeline e chamadas corretas sobre o dispositivo Null: lotes, recorte de área zero, ordem de uso, rejeição de estado inválido, cantos arredondados | `tool_tests` (`spriteui_rhi_*`, 4 testes) na engine | **Passando: 4/4** (dentro de 154/154) | Base de render |
 | **L6 Pixels GPU** | Sólido, recorte, blend premultiplicado, glifo com cobertura 255 e 128, fora do quad, fundo | `spriteui_gpu_test opengl` e `spriteui_gpu_test vulkan` (engine) | **Passando em OpenGL (Mesa) e Vulkan (lavapipe)** | Interface feia (base de cor e blend) |
 | **L7 Sprites 2D** | Sprite com UV de atlas, tint, rotação e escala no pacote; sprites sem clicar nem mudar | Visual (`tests/test_visual.cpp`) e L6 | **Parcial**: sprite com UV único coberto por L6; rotação e escala não testadas em GPU | Requisito de jogo |
@@ -122,14 +122,15 @@ Passos:
 6. [ ] Testes com janelas reais (SDL ou Xvfb): arrastar, soltar, redimensionar, trocar aba.
 Critério (L3): o item 5 e o 6 precisam passar. Hoje só o controlador (itens 1 a 4) está provado.
 
-### Fase C: campo de texto (pendente)
+### Fase C: campo de texto (modelo pronto; integração pendente)
 Passos:
-1. Modelo de edição: texto UTF-8, caret em índice de codepoint, seleção (âncora e ponta), histórico de Undo.
-2. Entrada: caracteres, Backspace, Delete, setas, Home/End, Shift+setas, Ctrl+A, Ctrl+C/X/V (clipboard via callback).
-3. Estado é o dono do texto. Renderização só lê. O campo nunca limpa o texto sem uma ação do usuário.
-4. Sem IME nesta fase. Documentar como limite.
-Critério (L4): cada operação tem um teste; "texto persiste": digitar, passar 1000 quadros sem entrada, texto e caret
-idênticos ao final.
+1. [x] Modelo de edição: `TextEditState` (`include/SpriteUi/Widgets/TextEdit.hpp`). Texto UTF-8, caret e âncora em offset de byte sobre fronteira de codepoint, histórico de Undo (limite 256).
+2. [~] Operações prontas: caracteres (controles descartados), Backspace, Delete, setas, Home/End, Shift+setas, Ctrl+A (`SelectAll`), Cut/Copy/Paste, Undo. Falta mapear teclas do `UIEventRouter` e o callback de clipboard do sistema.
+3. [x] Estado é o dono do texto: só operações explícitas mudam o texto. Teste de 1000 quadros de leitura comprova que nada muda. Renderização do campo ainda não existe.
+4. [x] Sem IME nesta fase. Limite documentado no cabeçalho de `TextEdit.hpp`.
+Critério (L4): cada operação tem um teste (feito, 43/43); "texto persiste": digitar, passar 1000 quadros sem entrada, texto e caret
+idênticos ao final (feito no modelo; falta repetir com o campo real na janela).
+Verificação de mutação: quebrar o recuo UTF-8 derruba 3 verificações (`Backspace`, `setas`); restaurado depois.
 
 ### Fase D: sprites e partículas 2D (pendente)
 Passos:
