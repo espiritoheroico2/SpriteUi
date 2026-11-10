@@ -333,6 +333,19 @@ else()
     message(STATUS "DXC not found: HLSL compilation target is skipped")
 endif()
 
+# Adaptador opcional para o RHI da ToolEngine. Header-only; NAO faz parte do nucleo.
+# O consumidor informa o alvo CMake que fornece tool::rhi (padrao: tool_rhi).
+option(SPRITEUI_WITH_TOOLENGINE_RHI "Build the optional ToolEngine RHI adapter (header-only)" OFF)
+set(SPRITEUI_TOOLENGINE_RHI_TARGET "tool_rhi" CACHE STRING "CMake target that provides tool::rhi")
+if(SPRITEUI_WITH_TOOLENGINE_RHI)
+    add_library(SpriteUi_ToolEngineRhi INTERFACE)
+    add_library(SpriteUi::ToolEngineRhi ALIAS SpriteUi_ToolEngineRhi)
+    target_compile_features(SpriteUi_ToolEngineRhi INTERFACE cxx_std_20)
+    target_include_directories(SpriteUi_ToolEngineRhi INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/adapters/toolengine/include>)
+    target_link_libraries(SpriteUi_ToolEngineRhi INTERFACE SpriteUi::SpriteUI ${SPRITEUI_TOOLENGINE_RHI_TARGET})
+endif()
+
 # Padrao de projeto: todo header publico deve compilar sozinho (self-contained).
 # Uso: cmake -DSPRITEUI_CHECK_HEADERS=ON ... && cmake --build . --target spriteui_check_headers
 option(SPRITEUI_CHECK_HEADERS "Compile each public header as its own translation unit" OFF)
