@@ -86,9 +86,9 @@ bool BuildTruetypeAtlas(
     out.pixels.assign(static_cast<std::size_t>(out.width) * out.height, 0);
     out.metrics.fontSize = kUnitsPerEm;
     out.metrics.unitsPerEm = kUnitsPerEm;
-    out.metrics.ascent = ascent * scale * toUnits;
-    out.metrics.descent = descent * scale * toUnits;
-    out.metrics.lineGap = std::max(0.0f, lineGap * scale * toUnits);
+    out.metrics.ascent = static_cast<float>(ascent) * scale * toUnits;
+    out.metrics.descent = static_cast<float>(descent) * scale * toUnits;
+    out.metrics.lineGap = std::max(0.0f, static_cast<float>(lineGap) * scale * toUnits);
     out.metrics.pxRange = 4.0f;
     out.metrics.atlasWidth = static_cast<float>(out.width);
     out.metrics.atlasHeight = static_cast<float>(out.height);
@@ -102,7 +102,7 @@ bool BuildTruetypeAtlas(
 
         int advance = 0, leftBearing = 0;
         stbtt_GetGlyphHMetrics(&info, glyphIndex, &advance, &leftBearing);
-        glyph.advance = advance * scale * toUnits;
+        glyph.advance = static_cast<float>(advance) * scale * toUnits;
 
         int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
         stbtt_GetGlyphBitmapBox(&info, glyphIndex, scale, scale, &x0, &y0, &x1, &y1);
@@ -124,14 +124,14 @@ bool BuildTruetypeAtlas(
                                   static_cast<int>(out.width), scale, scale, glyphIndex);
 
             // Pixels com y para baixo a partir do topo; planeBounds usa y para cima a partir da linha de base.
-            glyph.planeBounds[0] = x0 * toUnits;
-            glyph.planeBounds[1] = -y1 * toUnits;
-            glyph.planeBounds[2] = x1 * toUnits;
-            glyph.planeBounds[3] = -y0 * toUnits;
-            glyph.uvRect[0] = static_cast<float>(cursorX) / out.width;
-            glyph.uvRect[1] = static_cast<float>(cursorY) / out.height;
-            glyph.uvRect[2] = static_cast<float>(cursorX + w) / out.width;
-            glyph.uvRect[3] = static_cast<float>(cursorY + h) / out.height;
+            glyph.planeBounds[0] = static_cast<float>(x0) * toUnits;
+            glyph.planeBounds[1] = -static_cast<float>(y1) * toUnits;
+            glyph.planeBounds[2] = static_cast<float>(x1) * toUnits;
+            glyph.planeBounds[3] = -static_cast<float>(y0) * toUnits;
+            glyph.uvRect[0] = static_cast<float>(cursorX) / static_cast<float>(out.width);
+            glyph.uvRect[1] = static_cast<float>(cursorY) / static_cast<float>(out.height);
+            glyph.uvRect[2] = static_cast<float>(cursorX + w) / static_cast<float>(out.width);
+            glyph.uvRect[3] = static_cast<float>(cursorY + h) / static_cast<float>(out.height);
 
             cursorX += w + pad;
             rowHeight = std::max(rowHeight, h);
