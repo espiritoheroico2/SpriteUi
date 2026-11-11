@@ -52,4 +52,25 @@ public:
     void MoveCaretTo(std::size_t byteOffset, bool extend = false) noexcept;
 
     // Limite de pontos de desfazer guardados.
-    static constexpr std::size_t kMaxUndo
+    static constexpr std::size_t kMaxUndo = 256;
+
+private:
+    struct Snapshot {
+        std::string text;
+        std::size_t caret;
+        std::size_t anchor;
+    };
+
+    void Record();
+    void DeleteSelection();
+    [[nodiscard]] std::size_t PrevBoundary(std::size_t pos) const noexcept;
+    [[nodiscard]] std::size_t NextBoundary(std::size_t pos) const noexcept;
+    void SetCaret(std::size_t pos, bool extend) noexcept;
+
+    std::string text_;
+    std::size_t caret_ = 0;
+    std::size_t anchor_ = 0;
+    std::vector<Snapshot> undo_;
+};
+
+} // namespace ToolEngine::SpriteUi::Widgets
