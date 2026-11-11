@@ -205,8 +205,6 @@ void TestWordWrapUsesAtlasMetrics() {
     CHECK(result.size.x <= config.maxWidth + 0.01f);
 }
 
-} // namespace
-
 // Regressao: o item de desenho recebe [u, v, largura, altura]. O atlas guarda [u0, v0, u1, v1].
 void TestTextRenderItemUsesWidthHeightUv() {
     g_current = "TestTextRenderItemUsesWidthHeightUv";
@@ -230,6 +228,8 @@ void TestTextRenderItemUsesWidthHeightUv() {
     CHECK(std::fabs(uv[2] - (g.uvRect[2] - g.uvRect[0])) < 1e-6f);   // largura, nao u1
     CHECK(std::fabs(uv[3] - (g.uvRect[3] - g.uvRect[1])) < 1e-6f);   // altura, nao v1
 }
+
+} // namespace
 
 int main() {
     TestAtlasBuildsAndHasCoverage();
