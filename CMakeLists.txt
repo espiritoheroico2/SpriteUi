@@ -104,7 +104,10 @@ if(SPRITEUI_WITH_TEXT_STB)
     target_include_directories(SpriteUI_TextStb
         PUBLIC
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        PRIVATE
+    )
+    # stb_truetype.h e codigo de terceiros: SYSTEM suprime os avisos dele (ex.: -Wconversion), sem tocar no projeto.
+    target_include_directories(SpriteUI_TextStb
+        SYSTEM PRIVATE
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb>
     )
     target_link_libraries(SpriteUI_TextStb PUBLIC SpriteUi::SpriteUI)
