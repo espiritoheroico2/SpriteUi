@@ -22,6 +22,7 @@ add_library(SpriteUI
     src/Layout/LayoutTree.cpp
     src/Layout/LayoutBridge.cpp
     src/Text/DebugShaper.cpp
+    src/Text/FontRegistry.cpp
     src/Text/LineBreak.cpp
     src/Text/TextLayout.cpp
     src/Widgets/Widgets.cpp
@@ -30,8 +31,13 @@ add_library(SpriteUI
     src/Widgets/DockInteraction.cpp
     src/Widgets/DockOps.cpp
     src/Widgets/TextEdit.cpp
+    src/Widgets/TextField.cpp
+    src/Widgets/Controls.cpp
+    src/Widgets/StylePresets.cpp
     src/Widgets/Graphs.cpp
     src/Widgets/Popup.cpp
+    src/Widgets/FloatingWindows.cpp
+    src/Core/RefreshPolicy.cpp
     src/Config/UIConfig.cpp
 )
 add_library(SpriteUi::SpriteUI ALIAS SpriteUI)
@@ -239,6 +245,20 @@ if(SPRITEUI_BUILD_TESTS)
     target_link_libraries(spriteui_text_edit_tests PRIVATE SpriteUi::SpriteUI)
     add_test(NAME SpriteUI.TextEdit COMMAND spriteui_text_edit_tests)
 
+    # Campo de texto generico (TextField): rolagem que segue o caret, recorte a caixa e clique com rolagem.
+    add_executable(spriteui_text_field_tests tests/test_text_field.cpp)
+    target_link_libraries(spriteui_text_field_tests PRIVATE SpriteUi::SpriteUI)
+    add_test(NAME SpriteUI.TextField COMMAND spriteui_text_field_tests)
+    # Registro de fontes (FontRegistry): ids estaveis, fonte padrao e slice por fonte. Sem atlas real.
+    add_executable(spriteui_font_registry_tests tests/test_font_registry.cpp)
+    target_link_libraries(spriteui_font_registry_tests PRIVATE SpriteUi::SpriteUI)
+    add_test(NAME SpriteUI.FontRegistry COMMAND spriteui_font_registry_tests)
+    # Camada L0 (layout): padroes de construcao (LayoutPatterns.hpp) medidos pelo LayoutTree.
+    add_executable(spriteui_layout_pattern_tests tests/test_layout_patterns.cpp)
+    target_include_directories(spriteui_layout_pattern_tests PRIVATE tests)
+    target_link_libraries(spriteui_layout_pattern_tests PRIVATE SpriteUi::SpriteUI)
+    add_test(NAME SpriteUI.LayoutPatterns COMMAND spriteui_layout_pattern_tests)
+
     if(SPRITEUI_WITH_TEXT_STB)
         add_executable(spriteui_truetype_tests tests/test_truetype_atlas.cpp)
         target_link_libraries(spriteui_truetype_tests PRIVATE SpriteUi::TextStb)
@@ -268,6 +288,26 @@ if(SPRITEUI_BUILD_TESTS)
             "-DCONFIG=$<CONFIG>"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/PackageSmokeTest.cmake"
     )
+
+    # Controles como modelos puros (Controls.hpp): checkbox, slider, dropdown, abas e lista. Sem janela.
+    add_executable(spriteui_controls_tests tests/test_controls.cpp)
+    target_link_libraries(spriteui_controls_tests PRIVATE SpriteUi::SpriteUI)
+    add_test(NAME SpriteUI.Controls COMMAND spriteui_controls_tests)
+
+    # Presets de estilo (StylePresets.hpp): Classic, Modern e Effects. Forma e paleta separadas.
+    add_executable(spriteui_style_preset_tests tests/test_style_presets.cpp)
+    target_link_libraries(spriteui_style_preset_tests PRIVATE SpriteUi::SpriteUI)
+    add_test(NAME SpriteUI.StylePresets COMMAND spriteui_style_preset_tests)
+
+    # Janelas flutuantes (FloatingWindows.hpp): clamp no canvas, tamanho minimo, ordem Z, Float/Dock e encaixe.
+    add_executable(spriteui_floating_window_tests tests/test_floating_windows.cpp)
+    target_link_libraries(spriteui_floating_window_tests PRIVATE SpriteUi::SpriteUI)
+    add_test(NAME SpriteUI.FloatingWindows COMMAND spriteui_floating_window_tests)
+
+    # Politica de atualizacao por janela (RefreshPolicy.hpp): taxa em Hz, sujo e relogio injetado.
+    add_executable(spriteui_refresh_policy_tests tests/test_refresh_policy.cpp)
+    target_link_libraries(spriteui_refresh_policy_tests PRIVATE SpriteUi::SpriteUI)
+    add_test(NAME SpriteUI.RefreshPolicy COMMAND spriteui_refresh_policy_tests)
 endif()
 
 if(SPRITEUI_BUILD_BENCHMARKS)

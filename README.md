@@ -336,7 +336,15 @@ tree.Create(root, child);
 tree.Layout({{0,0},{640,480}});
 ```
 
-Este é um subconjunto de Flex: há freeze/re-distribuição para limites, wrap, `justifyContent`, `alignContent` e baseline; não há implementação de todas as regras CSS nem bases intrínsecas complexas. `BuildClipHierarchy` recebe clips em ordem pai-antes-do-filho e retorna interseções efetivas; o índice resultante pode ser atribuído a `UIRenderItem::clipIndex`. Para input, `HitTarget::clipRectLogical` deve receber o clip efetivo em coordenadas lógicas. Veja `docs/IMPLEMENTATION_STATUS.md` para limites e próximos passos.
+Este é um subconjunto de Flex: há freeze/re-distribuição para limites, wrap, `justifyContent`, `alignContent` e baseline; não há implementação de todas as regras CSS nem bases intrínsecas complexas.
+
+### Padrões de layout (`SpriteUi/Layout/LayoutPatterns.hpp`)
+
+Construtores pequenos para os padrões que antes eram literais de `FlexItem`: `Sized`, `WidthFraction`, `FillWidth`,
+`Row`, `Column`, `Centered` com `CenteredItem`, `Spacer`, `Grow`, e `LayoutTokens` (escala de espaçamento e alturas).
+`CreateLabeledField` cria uma linha de rótulo e campo num `LayoutTree` e devolve os handles. `AlignItems` é do filho:
+para centralizar nos dois eixos, use `Centered` no contêiner e `CenteredItem` no filho. A convenção de composição
+dos widgets está em `docs/COMPOSITION.md`. `BuildClipHierarchy` recebe clips em ordem pai-antes-do-filho e retorna interseções efetivas; o índice resultante pode ser atribuído a `UIRenderItem::clipIndex`. Para input, `HitTarget::clipRectLogical` deve receber o clip efetivo em coordenadas lógicas. Veja `docs/IMPLEMENTATION_STATUS.md` para limites e próximos passos.
 
 ## Estrutura do pacote
 

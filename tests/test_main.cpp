@@ -1,5 +1,4 @@
 #include "SpriteUi/SpriteUi.hpp"
-
 #include "TestHarness.hpp"
 #include "TestSuites.hpp"
 
@@ -83,7 +82,8 @@ void TestInputRouterClickAndCapture() {
     up.primaryReleased = true;
     auto upEvents = router.Process(up, std::span<const HitTarget>(&target, 1));
     bool clicked = false;
-    for (const auto& event : upEvents) clicked |= event.type == UIEventType::Click;
+    for (const auto& event : upEvents)
+        clicked |= event.type == UIEventType::Click;
     CHECK(clicked);
     CHECK(!router.GetState().capturedEntity.IsValid());
 }
@@ -132,7 +132,7 @@ void TestMultiPointerRouter() {
     result = router.ProcessFrame(2, up, targets);
     CHECK(result.valid);
     CHECK(std::count_if(result.events.begin(), result.events.end(),
-        [](const UIEvent& event) { return event.type == UIEventType::Click; }) == 2);
+                        [](const UIEvent& event) { return event.type == UIEventType::Click; }) == 2);
     CHECK(std::any_of(result.events.begin(), result.events.end(), [&](const UIEvent& event) {
         return event.type == UIEventType::Click && event.pointerId == 101 &&
                event.target == targets[0].handle;
@@ -162,15 +162,13 @@ void TestMultiPointerRouter() {
     touchDown.primaryDown = true;
     touchDown.primaryPressed = true;
     touchDown.frameId = 1;
-    result = cancellationRouter.ProcessFrame(
-        1, std::span<const UIInputSnapshot>(&touchDown, 1), targets);
+    result = cancellationRouter.ProcessFrame(1, std::span<const UIInputSnapshot>(&touchDown, 1), targets);
     CHECK(result.valid);
     touchDown.frameId = 2;
     touchDown.primaryDown = false;
     touchDown.primaryPressed = false;
     touchDown.pointerCancelled = true;
-    result = cancellationRouter.ProcessFrame(
-        2, std::span<const UIInputSnapshot>(&touchDown, 1), targets);
+    result = cancellationRouter.ProcessFrame(2, std::span<const UIInputSnapshot>(&touchDown, 1), targets);
     CHECK(result.valid);
     CHECK(std::any_of(result.events.begin(), result.events.end(), [](const UIEvent& event) {
         return event.type == UIEventType::Cancel && event.pointerId == 303;
@@ -226,7 +224,8 @@ void TestInputRouterCancelAndOcclusion() {
     lost.windowFocused = false;
     const auto events = router.Process(lost, targets);
     bool cancelled = false;
-    for (const auto& event : events) cancelled |= event.type == UIEventType::Cancel;
+    for (const auto& event : events)
+        cancelled |= event.type == UIEventType::Cancel;
     CHECK(cancelled);
     CHECK(!router.GetState().capturedEntity.IsValid());
 }
@@ -245,18 +244,17 @@ void TestHoverMoveEvent() {
     input.pointerDeltaLogical = {2, 1};
     const auto events = router.Process(input, std::span<const HitTarget>(&target, 1));
     bool moved = false;
-    for (const auto& event : events) moved |= event.type == UIEventType::PointerMove;
+    for (const auto& event : events)
+        moved |= event.type == UIEventType::PointerMove;
     CHECK(moved);
 }
 
 void TestSpatialNavigationAndDirtyFlags() {
     using namespace ToolEngine::SpriteUi::Input;
-    const UIFocusCandidate candidates[] = {
-        {{1, 1}, {{0, 0}, {40, 40}}, true, true, true},
-        {{2, 1}, {{60, 0}, {40, 40}}, true, true, true},
-        {{3, 1}, {{0, 60}, {40, 40}}, true, true, true},
-        {{4, 1}, {{-70, 0}, {40, 40}}, true, true, true}
-    };
+    const UIFocusCandidate candidates[] = {{{1, 1}, {{0, 0}, {40, 40}}, true, true, true},
+                                           {{2, 1}, {{60, 0}, {40, 40}}, true, true, true},
+                                           {{3, 1}, {{0, 60}, {40, 40}}, true, true, true},
+                                           {{4, 1}, {{-70, 0}, {40, 40}}, true, true, true}};
     CHECK(FindSpatialNeighbor({1, 1}, NavDirection::Right, candidates) == (UIHandle{2, 1}));
     CHECK(FindSpatialNeighbor({1, 1}, NavDirection::Down, candidates) == (UIHandle{3, 1}));
     CHECK(FindSpatialNeighbor({1, 1}, NavDirection::Left, candidates) == (UIHandle{4, 1}));
@@ -270,7 +268,6 @@ void TestSpatialNavigationAndDirtyFlags() {
     CHECK((dirty.Consume() & static_cast<std::uint32_t>(UIDirtyBits::DrawData)) != 0);
     CHECK(dirty.bits == 0);
 }
-
 
 void TestInvalidInputCancelsCapture() {
     using namespace ToolEngine::SpriteUi::Input;
@@ -293,7 +290,8 @@ void TestInvalidInputCancelsCapture() {
     invalid.pointerDeltaLogical.x = std::numeric_limits<float>::quiet_NaN();
     const auto events = router.Process(invalid, std::span<const HitTarget>(&target, 1));
     bool cancelled = false;
-    for (const auto& event : events) cancelled |= event.type == UIEventType::Cancel;
+    for (const auto& event : events)
+        cancelled |= event.type == UIEventType::Cancel;
     CHECK(cancelled);
     CHECK(!router.GetState().capturedEntity.IsValid());
 }
@@ -330,8 +328,8 @@ void TestHitTestTransformAndMaxFrameId() {
     CHECK(router.GetState().capturedEntity == target.handle);
     bool down = false;
     for (const auto& event : events) {
-        down |= event.type == UIEventType::PointerDown &&
-                Near(event.localPosition.x, 100.0f) && Near(event.localPosition.y, 50.0f);
+        down |= event.type == UIEventType::PointerDown && Near(event.localPosition.x, 100.0f) &&
+                Near(event.localPosition.y, 50.0f);
     }
     CHECK(down);
 
@@ -344,12 +342,10 @@ void TestHitTestTransformAndMaxFrameId() {
     invalidInput.frameId = 1;
     invalidInput.pointerPositionLogical = center;
     invalidInput.primaryPressed = true;
-    const auto invalidEvents = invalidRouter.Process(
-        invalidInput, std::span<const HitTarget>(&malformed, 1));
+    const auto invalidEvents = invalidRouter.Process(invalidInput, std::span<const HitTarget>(&malformed, 1));
     CHECK(!invalidRouter.GetState().capturedEntity.IsValid());
     CHECK(invalidEvents.empty());
 }
-
 
 void TestEventBubblingAndHoverConsumption() {
     using namespace ToolEngine::SpriteUi::Input;
@@ -397,11 +393,9 @@ void TestEventBubblingAndHoverConsumption() {
 
 void TestSemanticNavigationRouter() {
     using namespace ToolEngine::SpriteUi::Input;
-    const UIFocusCandidate candidates[] = {
-        {{11, 1}, {{0, 0}, {40, 40}}, true, true, true, 0},
-        {{12, 1}, {{60, 0}, {40, 40}}, true, true, true, 1},
-        {{13, 1}, {{0, 60}, {40, 40}}, true, true, true, 2}
-    };
+    const UIFocusCandidate candidates[] = {{{11, 1}, {{0, 0}, {40, 40}}, true, true, true, 0},
+                                           {{12, 1}, {{60, 0}, {40, 40}}, true, true, true, 1},
+                                           {{13, 1}, {{0, 60}, {40, 40}}, true, true, true, 2}};
 
     UINavigationRouter router;
     const auto moved = router.Process(UINavigationCommand::Right, candidates);
@@ -418,15 +412,12 @@ void TestSemanticNavigationRouter() {
     CHECK(cancelled.size() == 1);
     CHECK(cancelled.front().type == UISemanticEventType::Cancel);
 
-    const UIFocusCandidate disabled[] = {
-        {{12, 1}, {{60, 0}, {40, 40}}, true, false, true, 1}
-    };
+    const UIFocusCandidate disabled[] = {{{12, 1}, {{60, 0}, {40, 40}}, true, false, true, 1}};
     const auto lost = router.Process(UINavigationCommand::None, disabled);
     CHECK(!router.Focused().IsValid());
     CHECK(lost.size() == 1);
     CHECK(lost.front().type == UISemanticEventType::FocusChanged);
 }
-
 
 void TestReviewRegressions() {
     using namespace ToolEngine::SpriteUi::Widgets;
@@ -437,10 +428,17 @@ void TestReviewRegressions() {
 
     // Percentuais resolvem contra o pai, nao contra o viewport raiz.
     {
-        LayoutNode root; root.style.width = {SizeMode::Fixed, 400}; root.style.height = {SizeMode::Fixed, 100};
-        LayoutNode mid; mid.style.width = {SizeMode::Fixed, 200}; mid.style.height = {SizeMode::Fixed, 100};
-        LayoutNode leaf; leaf.style.width = {SizeMode::Percent, 0.5f}; leaf.style.height = {SizeMode::Fixed, 10};
-        mid.children = {leaf}; root.children = {mid};
+        LayoutNode root;
+        root.style.width = {SizeMode::Fixed, 400};
+        root.style.height = {SizeMode::Fixed, 100};
+        LayoutNode mid;
+        mid.style.width = {SizeMode::Fixed, 200};
+        mid.style.height = {SizeMode::Fixed, 100};
+        LayoutNode leaf;
+        leaf.style.width = {SizeMode::Percent, 0.5f};
+        leaf.style.height = {SizeMode::Fixed, 10};
+        mid.children = {leaf};
+        root.children = {mid};
         LayoutEngine engine;
         (void)engine.Measure(root, {400, 100});
         engine.Arrange(root, {{0, 0}, {400, 100}});
@@ -448,9 +446,18 @@ void TestReviewRegressions() {
     }
     // Stretch nao sobrescreve tamanho transversal Fixed; max/min sao respeitados no grow.
     {
-        LayoutNode root; root.style.width = {SizeMode::Fixed, 300}; root.style.height = {SizeMode::Fixed, 100};
-        LayoutNode a; a.style.width = {SizeMode::Flex, 0}; a.style.height = {SizeMode::Fixed, 30}; a.style.grow = 1; a.style.maxSize.x = 50;
-        LayoutNode b; b.style.width = {SizeMode::Flex, 0}; b.style.height = {SizeMode::Auto, 0}; b.style.grow = 1;
+        LayoutNode root;
+        root.style.width = {SizeMode::Fixed, 300};
+        root.style.height = {SizeMode::Fixed, 100};
+        LayoutNode a;
+        a.style.width = {SizeMode::Flex, 0};
+        a.style.height = {SizeMode::Fixed, 30};
+        a.style.grow = 1;
+        a.style.maxSize.x = 50;
+        LayoutNode b;
+        b.style.width = {SizeMode::Flex, 0};
+        b.style.height = {SizeMode::Auto, 0};
+        b.style.grow = 1;
         root.children = {a, b};
         LayoutEngine engine;
         (void)engine.Measure(root, {300, 100});
@@ -463,34 +470,41 @@ void TestReviewRegressions() {
     // Texto gerado precisa sobreviver ao RenderExtractor quando ha handle dono.
     {
         TextLayoutResult layout;
-        GlyphQuad quad; quad.bounds = {{0, 0}, {8, 8}};
+        GlyphQuad quad;
+        quad.bounds = {{0, 0}, {8, 8}};
         layout.quads.push_back(quad);
         UILayoutRect rect{{0, 0}, {100, 20}, true, false};
-        const auto items = GenerateTextRenderItems(layout, rect, {1, 1, 1, 1}, 1, NoClipIndex, 0.0f, 0, UIHandle{7, 1});
+        const auto items =
+            GenerateTextRenderItems(layout, rect, {1, 1, 1, 1}, 1, NoClipIndex, 0.0f, 0, UIHandle{7, 1});
         CHECK(RenderExtractor{}.Build(1, items).instances.size() == 1);
         CHECK(items[0].flags == Rendering::FlagMsdfText);
-        const auto bitmapItems = GenerateTextRenderItems(
-            layout, rect, {1, 1, 1, 1}, 1, NoClipIndex, 0.0f, 0,
-            UIHandle{7, 1}, Rendering::FlagBitmapText);
+        const auto bitmapItems = GenerateTextRenderItems(layout, rect, {1, 1, 1, 1}, 1, NoClipIndex, 0.0f, 0,
+                                                         UIHandle{7, 1}, Rendering::FlagBitmapText);
         CHECK(bitmapItems[0].flags == Rendering::FlagBitmapText);
     }
     // Bindings disparam na primeira leitura, mesmo com valores "sentinela" antigos.
     {
-        UIFloatBinding f; CHECK(f.Update(-1.0e9f));
-        UIIntBinding i; CHECK(i.Update(-999999)); CHECK(!i.Update(-999999));
+        UIFloatBinding f;
+        CHECK(f.Update(-1.0e9f));
+        UIIntBinding i;
+        CHECK(i.Update(-999999));
+        CHECK(!i.Update(-999999));
     }
     // Aba ativa preservada ao remover aba anterior; Split em no ja dividido e recusado.
     {
         UITabGroupComponent tabs;
-        (void)tabs.AddTab("A", {1, 1}); (void)tabs.AddTab("B", {2, 1}); (void)tabs.AddTab("C", {3, 1});
-        CHECK(tabs.SelectTab(2)); CHECK(tabs.RemoveTab(0));
+        (void)tabs.AddTab("A", {1, 1});
+        (void)tabs.AddTab("B", {2, 1});
+        (void)tabs.AddTab("C", {3, 1});
+        CHECK(tabs.SelectTab(2));
+        CHECK(tabs.RemoveTab(0));
         CHECK(tabs.GetActiveContent() == (UIHandle{3, 1}));
         UIDockNode node({10, 1});
         CHECK(node.Split(DockSlot::Left, 0.3f, {11, 1}));
         CHECK(!node.Split(DockSlot::Right, 0.3f, {12, 1}));
         UIDockNode leaf({20, 1});
         CHECK(leaf.Split(DockSlot::Center, 0.5f, {21, 1}));
-        CHECK(leaf.content == (UIHandle{20, 1}) && leaf.tabs.TabCount() == 2);
+        CHECK(!leaf.content.IsValid() && leaf.tabs.TabCount() == 2); // as janelas ficam so nas abas
         CHECK(leaf.VisibleContent() == (UIHandle{21, 1}));
     }
     // VirtualList: scroll gigantesco nao causa overflow de conversao.
@@ -510,7 +524,8 @@ void TestReviewRegressions() {
     // Config: chaves desconhecidas de qualquer tipo, escapes e lixo final.
     {
         UISettingsConfig out;
-        const std::string ok = R"({"extra":{"a":[1,2,{"b":null}]},"schemaVersion":1,"windows":[{"name":"a\"b","zzz":3.5}]})";
+        const std::string ok =
+            R"({"extra":{"a":[1,2,{"b":null}]},"schemaVersion":1,"windows":[{"name":"a\"b","zzz":3.5}]})";
         CHECK(UIConfigManager::ValidateAndStage(ok, out));
         CHECK(out.windows.size() == 1 && out.windows[0].name == "a\"b");
         CHECK(UIConfigManager::ValidateAndStage(UIConfigManager::Serialize(out), out));
@@ -520,9 +535,14 @@ void TestReviewRegressions() {
     }
     // Slider normalizado e ClampScroll livre (V4.2 sec. 3.1).
     {
-        UISliderComponent slider; slider.minValue = 10; slider.maxValue = 20; slider.value = 15;
+        UISliderComponent slider;
+        slider.minValue = 10;
+        slider.maxValue = 20;
+        slider.value = 15;
         CHECK(Near(slider.Normalized(), 0.5f));
-        UIScrollViewComponent scroll; scroll.contentSize = {100, 500}; scroll.scrollOffset = {0, 9999};
+        UIScrollViewComponent scroll;
+        scroll.contentSize = {100, 500};
+        scroll.scrollOffset = {0, 9999};
         ClampScroll(scroll, {100, 200});
         CHECK(Near(scroll.scrollOffset.y, 300.0f));
         CHECK((DirtyMeasure | DirtyArrange) != DirtyNone);
@@ -652,10 +672,8 @@ void TestToonTimeline() {
     TimelineTrack opacity;
     opacity.target = {70, 1};
     opacity.property = TweenProperty::Opacity;
-    opacity.keyframes = {
-        {0.0f, {0.0f, 0, 0, 0}, Easing::SmoothStep},
-        {2.0f, {1.0f, 0, 0, 0}, Easing::Linear}
-    };
+    opacity.keyframes = {{0.0f, {0.0f, 0, 0, 0}, Easing::SmoothStep},
+                         {2.0f, {1.0f, 0, 0, 0}, Easing::Linear}};
     CHECK(timeline.AddTrack(opacity));
     CHECK(timeline.TrackCount() == 1);
     CHECK(Near(timeline.Duration(), 2.0f));
@@ -682,8 +700,7 @@ void TestToonTimeline() {
     TimelineTrack position;
     position.target = {71, 1};
     position.property = TweenProperty::Position;
-    position.keyframes = {{0.0f, {}, Easing::Linear},
-                          {3.0f, {10.0f, 4.0f, 0, 0}, Easing::Linear}};
+    position.keyframes = {{0.0f, {}, Easing::Linear}, {3.0f, {10.0f, 4.0f, 0, 0}, Easing::Linear}};
     CHECK(timeline.AddTrack(position));
     CHECK(Near(timeline.Duration(), 3.0f));
     CHECK(timeline.RemoveTrack(position.target, position.property));
@@ -699,8 +716,7 @@ void TestToonTimelinePlayer() {
     TimelineTrack track;
     track.target = {72, 1};
     track.property = TweenProperty::Opacity;
-    track.keyframes = {{0.0f, {}, Easing::Linear},
-                       {2.0f, {1, 0, 0, 0}, Easing::Linear}};
+    track.keyframes = {{0.0f, {}, Easing::Linear}, {2.0f, {1, 0, 0, 0}, Easing::Linear}};
     CHECK(timeline.AddTrack(track));
 
     ToonTimelinePlayer player;
@@ -761,8 +777,7 @@ void TestRendererAbiPremultiplicationAndBatching() {
     icon.textureSlice = 3;
     icon.uvRect = {0.25f, 0.125f, 0.5f, 0.75f};
     icon.sourceSize = {32.0f, 48.0f};
-    const auto iconItem = MakeIconRenderItem(
-        icon, {{12, 18}, {24, 36}}, tint, {30, 2}, NoClipIndex, 1.0f, 9);
+    const auto iconItem = MakeIconRenderItem(icon, {{12, 18}, {24, 36}}, tint, {30, 2}, NoClipIndex, 1.0f, 9);
     CHECK(iconItem.has_value());
     CHECK(iconItem->textureSlice == 3);
     CHECK(Near(iconItem->uvRect[0], 0.25f));
@@ -830,8 +845,8 @@ void TestRendererAbiPremultiplicationAndBatching() {
     CHECK(tiePacket.batches.size() == 1);
 
     items[1].clipIndex = 3;
-    const auto invalidClipPacket = extractor.Build(45, items, nullptr,
-        std::span<const ClipRectGPU>(&clip, 1));
+    const auto invalidClipPacket =
+        extractor.Build(45, items, nullptr, std::span<const ClipRectGPU>(&clip, 1));
     CHECK(invalidClipPacket.instances.size() == 2);
     CHECK(IsFramePacketValid(invalidClipPacket));
 
@@ -856,72 +871,79 @@ void TestRendererAbiPremultiplicationAndBatching() {
 #include "SpriteUi/Layout/LayoutTree.hpp"
 static void TestFlexLayout() {
     using namespace ToolEngine::SpriteUi;
-    LayoutNode root; root.style.direction=LayoutDirection::Row; root.style.width={SizeMode::Fixed,300}; root.style.height={SizeMode::Fixed,100}; root.style.gap=10;
-    LayoutNode a; a.style.width={SizeMode::Fixed,100}; a.style.height={SizeMode::Fixed,40};
-    LayoutNode b; b.style.width={SizeMode::Flex,0}; b.style.height={SizeMode::Fixed,50}; b.style.grow=1;
-    root.children={a,b}; LayoutEngine engine; LayoutStats stats;
-    (void)engine.Measure(root,{300,100},&stats); engine.Arrange(root,{{0,0},{300,100}},&stats);
-    CHECK(root.children[0].rect.size.x==100.0f);
-    CHECK(root.children[1].rect.size.x==190.0f);
-    CHECK(root.children[1].rect.position.x==110.0f);
-    CHECK(stats.measured==3 && stats.arranged==3);
+    LayoutNode root;
+    root.style.direction = LayoutDirection::Row;
+    root.style.width = {SizeMode::Fixed, 300};
+    root.style.height = {SizeMode::Fixed, 100};
+    root.style.gap = 10;
+    LayoutNode a;
+    a.style.width = {SizeMode::Fixed, 100};
+    a.style.height = {SizeMode::Fixed, 40};
+    LayoutNode b;
+    b.style.width = {SizeMode::Flex, 0};
+    b.style.height = {SizeMode::Fixed, 50};
+    b.style.grow = 1;
+    root.children = {a, b};
+    LayoutEngine engine;
+    LayoutStats stats;
+    (void)engine.Measure(root, {300, 100}, &stats);
+    engine.Arrange(root, {{0, 0}, {300, 100}}, &stats);
+    CHECK(root.children[0].rect.size.x == 100.0f);
+    CHECK(root.children[1].rect.size.x == 190.0f);
+    CHECK(root.children[1].rect.position.x == 110.0f);
+    CHECK(stats.measured == 3 && stats.arranged == 3);
 }
-
 
 static void TestLayoutTreeAndAlignment() {
     using namespace ToolEngine::SpriteUi;
     LayoutTree tree;
     FlexItem rootStyle;
-    rootStyle.width={SizeMode::Fixed,200};
-    rootStyle.height={SizeMode::Fixed,100};
-    rootStyle.direction=LayoutDirection::Row;
-    rootStyle.gap=10;
-    const UIHandle root=tree.Create({},rootStyle);
+    rootStyle.width = {SizeMode::Fixed, 200};
+    rootStyle.height = {SizeMode::Fixed, 100};
+    rootStyle.direction = LayoutDirection::Row;
+    rootStyle.gap = 10;
+    const UIHandle root = tree.Create({}, rootStyle);
     FlexItem childStyle;
-    childStyle.width={SizeMode::Fixed,50};
-    childStyle.height={SizeMode::Fixed,20};
-    childStyle.alignItems=AlignItems::Center;
-    const UIHandle child=tree.Create(root,childStyle);
-    const UIHandle grandchild=tree.Create(child,childStyle);
+    childStyle.width = {SizeMode::Fixed, 50};
+    childStyle.height = {SizeMode::Fixed, 20};
+    childStyle.alignItems = AlignItems::Center;
+    const UIHandle child = tree.Create(root, childStyle);
+    const UIHandle grandchild = tree.Create(child, childStyle);
     CHECK(root.IsValid() && child.IsValid() && grandchild.IsValid());
-    CHECK(!tree.Create({123456u,1u},childStyle).IsValid());
-    tree.Layout({{0,0},{200,100}});
-    CHECK(Near(tree.Get(child)->node.rect.position.y,40.0f));
+    CHECK(!tree.Create({123456u, 1u}, childStyle).IsValid());
+    tree.Layout({{0, 0}, {200, 100}});
+    CHECK(Near(tree.Get(child)->node.rect.position.y, 40.0f));
     CHECK(tree.Remove(child));
-    CHECK(tree.Get(child)==nullptr);
-    CHECK(tree.Get(grandchild)==nullptr);
-    CHECK(tree.Get(root)!=nullptr);
+    CHECK(tree.Get(child) == nullptr);
+    CHECK(tree.Get(grandchild) == nullptr);
+    CHECK(tree.Get(root) != nullptr);
     CHECK(!tree.Remove(child));
 }
-
 
 static void TestClipHierarchyAndInputClip() {
     using namespace ToolEngine::SpriteUi;
     using namespace ToolEngine::SpriteUi::Rendering;
     const ClipNode nodes[] = {
-        {{0,0,100,100}, NoClipIndex, true},
-        {{25,25,125,125}, 0, true},
-        {{0,0,0,0}, 1, false}
-    };
-    const auto clips=BuildClipHierarchy(nodes);
+        {{0, 0, 100, 100}, NoClipIndex, true}, {{25, 25, 125, 125}, 0, true}, {{0, 0, 0, 0}, 1, false}};
+    const auto clips = BuildClipHierarchy(nodes);
     CHECK(clips.valid);
-    CHECK(clips.effectiveRects.size()==2);
-    CHECK(clips.nodeClipIndices[2]==clips.nodeClipIndices[1]);
-    CHECK(Near(clips.effectiveRects[1].minX,25));
-    CHECK(Near(clips.effectiveRects[1].maxX,100));
-    const ClipNode invalid[] = {{{0,0,1,1},1,true}};
+    CHECK(clips.effectiveRects.size() == 2);
+    CHECK(clips.nodeClipIndices[2] == clips.nodeClipIndices[1]);
+    CHECK(Near(clips.effectiveRects[1].minX, 25));
+    CHECK(Near(clips.effectiveRects[1].maxX, 100));
+    const ClipNode invalid[] = {{{0, 0, 1, 1}, 1, true}};
     CHECK(!BuildClipHierarchy(invalid).valid);
 
     Input::HitTarget target;
-    target.handle={7,1};
-    target.localSize={100,100};
-    target.clipEnabled=true;
-    target.clipRectLogical={{0,0},{50,50}};
+    target.handle = {7, 1};
+    target.localSize = {100, 100};
+    target.clipEnabled = true;
+    target.clipRectLogical = {{0, 0}, {50, 50}};
     Input::UIInputSnapshot input;
-    input.pointerPositionLogical={75,75};
-    input.frameId=1;
+    input.pointerPositionLogical = {75, 75};
+    input.frameId = 1;
     Input::UIEventRouter router;
-    const auto events=router.Process(input,std::span<const Input::HitTarget>(&target,1));
+    const auto events = router.Process(input, std::span<const Input::HitTarget>(&target, 1));
     CHECK(events.empty());
 }
 
@@ -952,7 +974,10 @@ static void TestFontMetricsAndTextLayout() {
     glyphs[0].planeBounds[1] = 0.0f;
     glyphs[0].planeBounds[2] = 550.0f;
     glyphs[0].planeBounds[3] = 700.0f;
-    glyphs[0].uvRect[0] = 0.1f; glyphs[0].uvRect[1] = 0.1f; glyphs[0].uvRect[2] = 0.2f; glyphs[0].uvRect[3] = 0.2f;
+    glyphs[0].uvRect[0] = 0.1f;
+    glyphs[0].uvRect[1] = 0.1f;
+    glyphs[0].uvRect[2] = 0.2f;
+    glyphs[0].uvRect[3] = 0.2f;
 
     // Glyph 1: 'B'
     glyphs[1].glyphId = 66;
@@ -962,7 +987,10 @@ static void TestFontMetricsAndTextLayout() {
     glyphs[1].planeBounds[1] = 0.0f;
     glyphs[1].planeBounds[2] = 550.0f;
     glyphs[1].planeBounds[3] = 700.0f;
-    glyphs[1].uvRect[0] = 0.3f; glyphs[1].uvRect[1] = 0.1f; glyphs[1].uvRect[2] = 0.2f; glyphs[1].uvRect[3] = 0.2f;
+    glyphs[1].uvRect[0] = 0.3f;
+    glyphs[1].uvRect[1] = 0.1f;
+    glyphs[1].uvRect[2] = 0.2f;
+    glyphs[1].uvRect[3] = 0.2f;
 
     // Glyph 2: 'C'
     glyphs[2].glyphId = 67;
@@ -972,7 +1000,10 @@ static void TestFontMetricsAndTextLayout() {
     glyphs[2].planeBounds[1] = 0.0f;
     glyphs[2].planeBounds[2] = 550.0f;
     glyphs[2].planeBounds[3] = 700.0f;
-    glyphs[2].uvRect[0] = 0.5f; glyphs[2].uvRect[1] = 0.1f; glyphs[2].uvRect[2] = 0.2f; glyphs[2].uvRect[3] = 0.2f;
+    glyphs[2].uvRect[0] = 0.5f;
+    glyphs[2].uvRect[1] = 0.1f;
+    glyphs[2].uvRect[2] = 0.2f;
+    glyphs[2].uvRect[3] = 0.2f;
 
     TextLayoutConfig config;
     config.fontSize = 20.0f;
