@@ -2,6 +2,7 @@
 // Usa um shaper sintetico (um glifo por byte, avanco fixo) para nao depender de fonte nem de stb.
 #include "SpriteUi/Widgets/TextField.hpp"
 #include "SpriteUi/Widgets/Widgets.hpp"
+#include "SyntheticTextLayout.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -18,6 +19,7 @@ using ToolEngine::SpriteUi::Widgets::ToggleStyle;
 using ToolEngine::SpriteUi::Widgets::UIToggleComponent;
 namespace Text = ToolEngine::SpriteUi::Text;
 namespace Rendering = ToolEngine::SpriteUi::Rendering;
+using SyntheticText::Layout;
 
 int run = 0;
 int failed = 0;
@@ -37,30 +39,6 @@ bool Near(float a, float b, float eps = 1.0e-3f) {
 
 bool SameColor(Vec4 a, Vec4 b) {
     return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w;
-}
-
-// Layout de um glifo por byte, com avanco de 500 unidades (10 px com fontSize 20) e caixa de glifo com area.
-Text::TextLayoutResult Layout(const std::string& text, float fontSize = 20.0f) {
-    std::vector<Text::GlyphInstance> glyphs;
-    glyphs.reserve(text.size());
-    for (std::size_t i = 0; i < text.size(); ++i) {
-        Text::GlyphInstance g;
-        g.glyphId = static_cast<std::uint32_t>(static_cast<unsigned char>(text[i]));
-        g.clusterByteOffset = static_cast<std::uint32_t>(i);
-        g.xAdvance = 500.0f;
-        // Caixa do glifo com area (sem ela o gerador de itens descarta o glifo).
-        g.planeBounds[0] = 50.0f;
-        g.planeBounds[1] = -200.0f;
-        g.planeBounds[2] = 450.0f;
-        g.planeBounds[3] = 800.0f;
-        g.uvRect[2] = 0.1f;
-        g.uvRect[3] = 0.1f;
-        glyphs.push_back(g);
-    }
-    Text::FontMetrics metrics;
-    Text::TextLayoutConfig cfg;
-    cfg.fontSize = fontSize;
-    return Text::LayoutText(text, glyphs, metrics, cfg);
 }
 
 constexpr Rect kBox{{0.0f, 40.0f}, {200.0f, 30.0f}};

@@ -1,5 +1,7 @@
 #include "SpriteUi/Widgets/DockOps.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <utility>
 
@@ -107,6 +109,17 @@ bool ApplyDropResult(UIDockNode& root, UIHandle window, const DockDropResult& dr
     }
     }
     return false;
+}
+
+bool DragSplitDivider(UIDockNode& node, float offsetPx, float minSidePx) noexcept {
+    if (!node.isSplit || !node.firstChild || !node.secondChild) return false;
+    if (!std::isfinite(offsetPx) || !std::isfinite(minSidePx) || minSidePx < 0.0f) return false;
+
+    const float length = node.splitDirection == LayoutDirection::Row ? node.bounds.size.x : node.bounds.size.y;
+    if (!std::isfinite(length) || length <= 0.0f || 2.0f * minSidePx > length) return false;
+
+    node.splitRatio = std::clamp(offsetPx, minSidePx, length - minSidePx) / length;
+    return true;
 }
 
 } // namespace ToolEngine::SpriteUi::Widgets

@@ -1,28 +1,11 @@
 #include "SpriteUi/Widgets/TextField.hpp"
 
+#include "SpriteUi/Rendering/Primitives.hpp"
+
 #include <algorithm>
 #include <utility>
 
 namespace ToolEngine::SpriteUi::Widgets {
-
-namespace {
-
-// Item de cor solida (fundo, selecao, caret) no dono do campo.
-Rendering::UIRenderItem SolidItem(UIHandle owner, Rect r, Vec4 color, std::uint32_t clipIndex, float zOrder,
-                                  std::uint64_t paintOrder) {
-    Rendering::UIRenderItem item;
-    item.handle = owner;
-    item.layout.resolvedPosition = r.position;
-    item.layout.resolvedSize = r.size;
-    item.tintPremultipliedLinear = color;
-    item.textureSlice = Rendering::WhiteTextureSlice;
-    item.clipIndex = clipIndex;
-    item.zOrder = zOrder;
-    item.paintOrder = paintOrder;
-    return item;
-}
-
-} // namespace
 
 TextField::TextField(std::string text) : edit_{std::move(text)} {}
 
@@ -91,7 +74,7 @@ std::vector<Rendering::UIRenderItem> TextField::Build(Rect box, const Text::Text
 
     std::uint64_t paint = target.paintOrder;
     // Fundo: a propria caixa, sem recorte (ele e o recorte).
-    out.push_back(SolidItem(target.owner, box, bg, Rendering::NoClipIndex, 0.0f, paint++));
+    out.push_back(Rendering::MakeSolidRect(target.owner, box, bg, Rendering::NoClipIndex, 0.0f, paint++));
 
     // Recorte da caixa: texto, selecao e caret ficam dentro dela. E o ultimo elemento de clips.
     clips.push_back({box.position.x, box.position.y, box.Max().x, box.Max().y});
@@ -101,8 +84,9 @@ std::vector<Rendering::UIRenderItem> TextField::Build(Rect box, const Text::Text
         const auto [begin, end] = edit_.SelectionRange();
         const float x0 = Text::GetCaretRect(layout, static_cast<std::uint32_t>(begin)).position.x;
         const float x1 = Text::GetCaretRect(layout, static_cast<std::uint32_t>(end)).position.x;
-        out.push_back(SolidItem(target.owner, {{origin.x + x0, origin.y}, {x1 - x0, lineHeight}},
-                                style.selection, clip, target.zOrder, paint++));
+        out.push_back(Rendering::MakeSolidRect(target.owner,
+                                               {{origin.x + x0, origin.y}, {x1 - x0, lineHeight}},
+                                               style.selection, clip, target.zOrder, paint++));
     }
 
     // Texto (um item por glifo). O helper de texto avanca paintOrder pelo numero de itens gerados.
@@ -116,8 +100,9 @@ std::vector<Rendering::UIRenderItem> TextField::Build(Rect box, const Text::Text
 
     if (focused_) {
         const float caretX = Text::GetCaretRect(layout, static_cast<std::uint32_t>(edit_.Caret())).position.x;
-        out.push_back(SolidItem(target.owner, {{origin.x + caretX, origin.y}, {style.caretWidth, lineHeight}},
-                                style.caret, clip, target.zOrder, paint++));
+        out.push_back(Rendering::MakeSolidRect(
+            target.owner, {{origin.x + caretX, origin.y}, {style.caretWidth, lineHeight}}, style.caret, clip,
+            target.zOrder, paint++));
     }
     return out;
 }

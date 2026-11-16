@@ -134,25 +134,38 @@ struct TabBarControl {
 
 enum class ListKey : std::uint8_t { Up, Down, Home, End };
 
-// Lista de selecao simples (uma por vez). Altura de linha e numero de itens vem de UIVirtualList.
+using ListItemId = std::uint64_t;
+// Valor reservado para "nenhum item". Um item nunca usa este identificador.
+inline constexpr ListItemId NoListItem = std::numeric_limits<ListItemId>::max();
+
+// Lista de selecao simples (uma por vez). A selecao guarda o identificador do item, nao a posicao: inserir ou
+// remover itens nao muda o item escolhido. Identificadores devem ser unicos. Altura de linha vem de UIVirtualList.
 // Rolagem: EnsureVisible() faz o minimo de rolagem para o item selecionado caber na area visivel. Se o item
 // ja esta visivel, a rolagem nao muda. Com area visivel de altura zero ou menos, nao rola.
 struct ListViewControl {
     UIVirtualList items{};
-    std::size_t selectedIndex = NoControlIndex;
+    ListItemId selectedId = NoListItem;
     float scrollOffsetY = 0.0f;
     float viewportHeight = 0.0f;
     bool disabled = false;
 
-    void SetItemCount(std::size_t count) noexcept; // Se a selecao ficar fora da lista, ela e limpa.
+    // Lista com identificadores 0..count-1 (posicao = identificador).
+    void SetItemCount(std::size_t count) noexcept;
+    // Troca os itens. A selecao continua no mesmo item se ele ainda existe; senao e limpa.
+    void SetItemIds(std::vector<ListItemId> ids) noexcept;
     void SetItemHeight(float height) noexcept;
     void SetViewportHeight(float height) noexcept;
+
+    // Posicao do item selecionado, ou NoControlIndex.
+    [[nodiscard]] std::size_t SelectedIndex() const noexcept;
 
     [[nodiscard]] float MaxScrollY() const noexcept;
     void ClampScroll() noexcept;
 
-    // Seleciona i e garante que ele esta visivel. Retorna true se a selecao mudou.
+    // Seleciona o item na posicao index e garante que ele esta visivel. Retorna true se a selecao mudou.
     [[nodiscard]] bool Select(std::size_t index) noexcept;
+    // Seleciona pelo identificador. Id desconhecido nao muda nada. Retorna true se a selecao mudou.
+    [[nodiscard]] bool SelectId(ListItemId id) noexcept;
 
     // Setas e Home/End. Sem selecao, Up/Down levam ao item 0. Retorna true se a selecao mudou.
     [[nodiscard]] bool Key(ListKey key) noexcept;
@@ -165,7 +178,10 @@ struct ListViewControl {
     }
 
   private:
+    [[nodiscard]] std::size_t IndexOf(ListItemId id) const noexcept;
     void EnsureVisible() noexcept;
+
+    std::vector<ListItemId> ids_;
 };
 
 } // namespace ToolEngine::SpriteUi::Widgets

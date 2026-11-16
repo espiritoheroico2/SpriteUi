@@ -8,6 +8,8 @@
 #include "SpriteUi/Core/Handle.hpp"
 #include "SpriteUi/Core/Math.hpp"
 #include "SpriteUi/Core/Transform2D.hpp"
+#include "SpriteUi/Elements/Element.hpp"
+#include "SpriteUi/Elements/ElementTree.hpp"
 #include "SpriteUi/Input/InputRouter.hpp"
 #include "SpriteUi/Input/MultiPointerRouter.hpp"
 #include "SpriteUi/Input/SpatialNavigation.hpp"

@@ -157,6 +157,92 @@ void TestTextIsNeverChangedByReadingOrIdleFrames() {
 
 } // namespace
 
+// Area de texto aceita quebra de linha; o campo de uma linha continua descartando-a.
+void TestNewlineAcceptedOnlyWhenEnabled() {
+    TextEditState singleLine("ab");
+    singleLine.InsertText("\nc");
+    CHECK(singleLine.Text() == "abc");
+
+    TextEditState multiLine(std::string("ab"), true);
+    multiLine.InsertText("\nc");
+    CHECK(multiLine.Text() == "ab\nc");
+    CHECK(multiLine.Caret() == 4);
+    multiLine.InsertText("\t");
+    CHECK(multiLine.Text() == "ab\nc"); // outros controles continuam descartados
+}
+
+void TestInvalidUtf8InputIsRejected() {
+    current = "TestInvalidUtf8InputIsRejected";
+    TextEditState e;
+    e.InsertText("\xC3");          // sequencia cortada
+    CHECK(e.Text().empty());
+    e.InsertText("\xFF");          // byte que nunca aparece em UTF-8
+    CHECK(e.Text().empty());
+    e.InsertText("\xC0\xAF");      // overlong
+    CHECK(e.Text().empty());
+    e.InsertText("\xED\xA0\x80");  // surrogate
+    CHECK(e.Text().empty());
+    e.InsertText("\xF4\x90\x80\x80"); // acima de U+10FFFF
+    CHECK(e.Text().empty());
+    e.InsertText("\xC3\xA9");      // e com agudo: valido
+    CHECK(e.Text() == "\xC3\xA9");
+}
+
+void TestInvalidUtf8ConstructorTextIsRejected() {
+    current = "TestInvalidUtf8ConstructorTextIsRejected";
+    TextEditState e(std::string("a\xFF"));
+    CHECK(e.Text().empty());
+    CHECK(e.Caret() == 0);
+}
+
+void TestTextLengthIsLimitedOnCodepointBoundary() {
+    current = "TestTextLengthIsLimitedOnCodepointBoundary";
+    TextEditState e;
+    e.InsertText(std::string(TextEditState::kMaxTextBytes + 10, 'a'));
+    CHECK(e.Text().size() == TextEditState::kMaxTextBytes);
+
+    TextEditState almostFull;
+    almostFull.InsertText(std::string(TextEditState::kMaxTextBytes - 1, 'a'));
+    almostFull.InsertText("\xC3\xA9"); // dois bytes nao cabem em um
+    CHECK(almostFull.Text().size() == TextEditState::kMaxTextBytes - 1);
+    CHECK(almostFull.Text().back() == 'a');
+}
+
+void TestBackspaceRemovesCombiningCluster() {
+    current = "TestBackspaceRemovesCombiningCluster";
+    TextEditState e(std::string("e\xCC\x81")); // e + acento combinante
+    CHECK(e.Backspace());
+    CHECK(e.Text().empty());
+    CHECK(e.Caret() == 0);
+}
+
+void TestDeleteRemovesCombiningCluster() {
+    current = "TestDeleteRemovesCombiningCluster";
+    TextEditState e(std::string("e\xCC\x81x"));
+    e.MoveHome();
+    CHECK(e.Delete());
+    CHECK(e.Text() == "x");
+}
+
+void TestArrowsStepOverCombiningCluster() {
+    current = "TestArrowsStepOverCombiningCluster";
+    TextEditState e(std::string("e\xCC\x81x"));
+    e.MoveHome();
+    e.MoveRight();
+    CHECK(e.Caret() == 3);
+    e.MoveLeft();
+    CHECK(e.Caret() == 0);
+}
+
+void TestCaretNeverInsideCluster() {
+    current = "TestCaretNeverInsideCluster";
+    TextEditState e(std::string("e\xCC\x81x"));
+    e.MoveCaretTo(2);
+    CHECK(e.Caret() == 0);
+    e.MoveCaretTo(1);
+    CHECK(e.Caret() == 0);
+}
+
 int main() {
     TestInsertAtCaretAndTyping();
     TestControlCharactersAreDropped();
@@ -169,6 +255,14 @@ int main() {
     TestHomeAndEndWithSelection();
     TestMoveCaretToSnapsToCodepointBoundary();
     TestTextIsNeverChangedByReadingOrIdleFrames();
+    TestNewlineAcceptedOnlyWhenEnabled();
+    TestInvalidUtf8InputIsRejected();
+    TestInvalidUtf8ConstructorTextIsRejected();
+    TestTextLengthIsLimitedOnCodepointBoundary();
+    TestBackspaceRemovesCombiningCluster();
+    TestDeleteRemovesCombiningCluster();
+    TestArrowsStepOverCombiningCluster();
+    TestCaretNeverInsideCluster();
     std::printf("text edit: %d/%d checks passed\n", run - failed, run);
     return failed == 0 ? 0 : 1;
 }

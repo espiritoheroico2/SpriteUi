@@ -5,6 +5,7 @@
 #include "SpriteUi/Widgets/DockOps.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstdio>
 
 namespace {
@@ -310,6 +311,82 @@ void TestSplittingAGroupMovesAllItsTabsToOneSide() {
     CHECK(FindLeafContaining(root, kC) == root.secondChild.get());
 }
 
+// Comparacao em pixels com folga: a proporcao do divisor passa por float e nao e exata.
+bool NearPx(float a, float b) {
+    return std::fabs(a - b) < 0.01f;
+}
+
+void TestDockAboveAndBelowStackWindows() {
+    current = "TestDockAboveAndBelowStackWindows";
+    UIDockNode root(kA);
+    CHECK(ApplyDropResult(root, kW, DockDropResult{DockAction::Dock, DockSlot::Top, kA}));
+    root.Layout(kScreen);
+    const UIDockNode* top = FindLeafContaining(root, kW);
+    const UIDockNode* base = FindLeafContaining(root, kA);
+    CHECK(top && base);
+    if (!top || !base) return;
+    CHECK(top->bounds.position.y < base->bounds.position.y); // W acima de A
+    CHECK(top->bounds.size.x == kScreen.size.x && base->bounds.size.x == kScreen.size.x);
+    CHECK(top->bounds.size.y + base->bounds.size.y == kScreen.size.y); // sem folga nem sobra
+
+    UIDockNode bottomRoot(kA);
+    CHECK(ApplyDropResult(bottomRoot, kW, DockDropResult{DockAction::Dock, DockSlot::Bottom, kA}));
+    bottomRoot.Layout(kScreen);
+    const UIDockNode* below = FindLeafContaining(bottomRoot, kW);
+    const UIDockNode* upper = FindLeafContaining(bottomRoot, kA);
+    CHECK(below && upper);
+    if (!below || !upper) return;
+    CHECK(below->bounds.position.y > upper->bounds.position.y); // W abaixo de A
+    CHECK(below->bounds.position.y + below->bounds.size.y == kScreen.size.y);
+}
+
+void TestDividerStopsAtMinimumSides() {
+    current = "TestDividerStopsAtMinimumSides";
+    const Rect area{{0, 0}, {300, 100}};
+    UIDockNode root(kA);
+    CHECK(root.Split(DockSlot::Right, 0.5f, kB));
+
+    root.Layout(area);
+    CHECK(DragSplitDivider(root, 10.0f, 80.0f)); // arrasta demais para a esquerda
+    root.Layout(area);
+    CHECK(NearPx(FindLeafContaining(root, kA)->bounds.size.x, 80.0f));
+    CHECK(NearPx(FindLeafContaining(root, kB)->bounds.size.x, 220.0f));
+
+    CHECK(DragSplitDivider(root, 290.0f, 80.0f)); // arrasta demais para a direita
+    root.Layout(area);
+    CHECK(NearPx(FindLeafContaining(root, kB)->bounds.size.x, 80.0f));
+    CHECK(NearPx(FindLeafContaining(root, kA)->bounds.size.x, 220.0f));
+
+    CHECK(DragSplitDivider(root, 150.0f, 80.0f)); // dentro dos limites: a posicao vale
+    root.Layout(area);
+    CHECK(NearPx(FindLeafContaining(root, kA)->bounds.size.x, 150.0f));
+}
+
+void TestDividerOfColumnUsesHeight() {
+    current = "TestDividerOfColumnUsesHeight";
+    const Rect area{{0, 0}, {300, 200}};
+    UIDockNode root(kA);
+    CHECK(root.Split(DockSlot::Bottom, 0.5f, kB));
+    root.Layout(area);
+    CHECK(DragSplitDivider(root, 5.0f, 60.0f));
+    root.Layout(area);
+    CHECK(NearPx(FindLeafContaining(root, kA)->bounds.size.y, 60.0f));
+    CHECK(NearPx(FindLeafContaining(root, kB)->bounds.size.y, 140.0f));
+}
+
+void TestDividerRejectsAreaTooSmallForTwoMinimums() {
+    current = "TestDividerRejectsAreaTooSmallForTwoMinimums";
+    UIDockNode root(kA);
+    CHECK(root.Split(DockSlot::Right, 0.5f, kB));
+    root.Layout(Rect{{0, 0}, {300, 100}});
+    const float before = root.splitRatio;
+    CHECK(!DragSplitDivider(root, 150.0f, 200.0f));
+    CHECK(root.splitRatio == before); // nada muda quando recusa
+
+    UIDockNode leaf(kA);
+    CHECK(!DragSplitDivider(leaf, 10.0f, 10.0f)); // folha nao tem divisor
+}
+
 } // namespace
 
 int main() {
@@ -336,6 +413,10 @@ int main() {
     TestRemovingAnEarlierTabKeepsTheActiveWindow();
     TestLastWindowOfAGroupLeavesAnEmptyLeaf();
     TestSplittingAGroupMovesAllItsTabsToOneSide();
+    TestDockAboveAndBelowStackWindows();
+    TestDividerStopsAtMinimumSides();
+    TestDividerOfColumnUsesHeight();
+    TestDividerRejectsAreaTooSmallForTwoMinimums();
     std::printf("dock interaction: %d/%d checks passed\n", run - failed, run);
     return failed == 0 ? 0 : 1;
 }

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <numeric>
 #include <utility>
 
 namespace ToolEngine::SpriteUi::Widgets {
@@ -151,9 +152,26 @@ bool TabBarControl::Select(std::size_t index) noexcept {
 // ListView
 
 void ListViewControl::SetItemCount(std::size_t count) noexcept {
-    items.SetTotalItems(count);
-    if (selectedIndex != NoControlIndex && selectedIndex >= count) selectedIndex = NoControlIndex;
+    std::vector<ListItemId> ids(count);
+    std::iota(ids.begin(), ids.end(), ListItemId{0});
+    SetItemIds(std::move(ids));
+}
+
+void ListViewControl::SetItemIds(std::vector<ListItemId> ids) noexcept {
+    ids_ = std::move(ids);
+    items.SetTotalItems(ids_.size());
+    if (SelectedIndex() == NoControlIndex) selectedId = NoListItem;
     ClampScroll();
+}
+
+std::size_t ListViewControl::SelectedIndex() const noexcept {
+    return IndexOf(selectedId);
+}
+
+std::size_t ListViewControl::IndexOf(ListItemId id) const noexcept {
+    if (id == NoListItem) return NoControlIndex;
+    const auto it = std::find(ids_.begin(), ids_.end(), id);
+    return it == ids_.end() ? NoControlIndex : static_cast<std::size_t>(it - ids_.begin());
 }
 
 void ListViewControl::SetItemHeight(float height) noexcept {
@@ -176,25 +194,31 @@ void ListViewControl::ClampScroll() noexcept {
 }
 
 bool ListViewControl::Select(std::size_t index) noexcept {
-    if (disabled || !IsValidIndex(index, items.GetTotalItems())) return false;
-    const bool changed = index != selectedIndex;
-    selectedIndex = index;
+    if (!IsValidIndex(index, ids_.size())) return false;
+    return SelectId(ids_[index]);
+}
+
+bool ListViewControl::SelectId(ListItemId id) noexcept {
+    if (disabled || IndexOf(id) == NoControlIndex) return false;
+    const bool changed = id != selectedId;
+    selectedId = id;
     EnsureVisible();
     return changed;
 }
 
 bool ListViewControl::Key(ListKey key) noexcept {
-    const std::size_t count = items.GetTotalItems();
+    const std::size_t count = ids_.size();
     if (disabled || count == 0) return false;
 
-    std::size_t target = selectedIndex;
-    const bool hasSelection = IsValidIndex(selectedIndex, count);
+    const std::size_t current = SelectedIndex();
+    const bool hasSelection = IsValidIndex(current, count);
+    std::size_t target = current;
     switch (key) {
     case ListKey::Up:
-        target = (!hasSelection || selectedIndex == 0) ? 0 : selectedIndex - 1;
+        target = (!hasSelection || current == 0) ? 0 : current - 1;
         break;
     case ListKey::Down:
-        target = !hasSelection ? 0 : std::min(selectedIndex + 1, count - 1);
+        target = !hasSelection ? 0 : std::min(current + 1, count - 1);
         break;
     case ListKey::Home:
         target = 0;
@@ -211,8 +235,9 @@ VirtualListRange ListViewControl::VisibleRange() const noexcept {
 }
 
 void ListViewControl::EnsureVisible() noexcept {
-    if (!IsValidIndex(selectedIndex, items.GetTotalItems()) || viewportHeight <= 0.0f) return;
-    const float top = items.GetItemOffsetY(selectedIndex);
+    const std::size_t index = SelectedIndex();
+    if (!IsValidIndex(index, ids_.size()) || viewportHeight <= 0.0f) return;
+    const float top = items.GetItemOffsetY(index);
     const float bottom = top + items.GetItemHeight();
     if (top < scrollOffsetY) {
         scrollOffsetY = top;

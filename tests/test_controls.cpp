@@ -311,7 +311,7 @@ void TestListViewScrollMinimal() {
     CHECK(Near(l.scrollOffsetY, 1900.0f));
     CHECK(!l.Select(99));
     CHECK(!l.Select(100)); // Indice invalido.
-    CHECK(l.selectedIndex == 99);
+    CHECK(l.SelectedIndex() == 99);
 }
 
 void TestListViewKeysAndBounds() {
@@ -321,15 +321,15 @@ void TestListViewKeysAndBounds() {
     l.SetViewportHeight(100.0f);
 
     CHECK(l.Key(ListKey::Down)); // Sem selecao: vai ao item 0.
-    CHECK(l.selectedIndex == 0);
+    CHECK(l.SelectedIndex() == 0);
     CHECK(!l.Key(ListKey::Up)); // Ja no item 0: para.
-    CHECK(l.selectedIndex == 0);
+    CHECK(l.SelectedIndex() == 0);
     CHECK(l.Key(ListKey::Down));
     CHECK(l.Key(ListKey::End));
-    CHECK(l.selectedIndex == 2);
+    CHECK(l.SelectedIndex() == 2);
     CHECK(!l.Key(ListKey::Down)); // Ultimo: para.
     CHECK(l.Key(ListKey::Home));
-    CHECK(l.selectedIndex == 0);
+    CHECK(l.SelectedIndex() == 0);
 
     ListViewControl empty;
     CHECK(!empty.Key(ListKey::Down));
@@ -341,6 +341,31 @@ void TestListViewKeysAndBounds() {
     CHECK(!off.Key(ListKey::Down));
     CHECK(!off.Select(0));
     CHECK(off.State() == ControlState::Disabled);
+}
+
+void TestListSelectionFollowsItemIdentity() {
+    ListViewControl l;
+    l.SetItemHeight(20.0f);
+    l.SetViewportHeight(100.0f);
+    l.SetItemIds({10, 20, 30});
+    CHECK(l.Select(1)); // item de id 20
+    CHECK(l.selectedId == 20);
+    l.SetItemIds({5, 10, 20, 30}); // item novo antes da selecao
+    CHECK(l.selectedId == 20);
+    CHECK(l.SelectedIndex() == 2);
+    l.SetItemIds({10, 30}); // o item selecionado some
+    CHECK(l.selectedId == NoListItem);
+    CHECK(l.SelectedIndex() == NoControlIndex);
+}
+
+void TestListSelectById() {
+    ListViewControl l;
+    l.SetItemIds({7, 8, 9});
+    CHECK(l.SelectId(9));
+    CHECK(l.SelectedIndex() == 2);
+    CHECK(!l.SelectId(9));
+    CHECK(!l.SelectId(42)); // id que nao esta na lista
+    CHECK(l.selectedId == 9);
 }
 
 void TestListViewNoScrollWithoutViewport() {
@@ -364,7 +389,7 @@ void TestListViewCountShrinkClampsSelectionAndScroll() {
     CHECK(l.Select(80));
     CHECK(Near(l.scrollOffsetY, 1520.0f)); // Item 80 termina em 1620: rolagem minima = 1620 - 100.
     l.SetItemCount(10); // Lista encolhe: selecao 80 some; rolagem recua para o novo maximo (200 - 100).
-    CHECK(l.selectedIndex == NoControlIndex);
+    CHECK(l.SelectedIndex() == NoControlIndex);
     CHECK(Near(l.scrollOffsetY, 100.0f));
     CHECK(Near(l.MaxScrollY(), 100.0f));
 }
@@ -399,6 +424,8 @@ int main() {
     TestListViewKeysAndBounds();
     TestListViewNoScrollWithoutViewport();
     TestListViewCountShrinkClampsSelectionAndScroll();
+    TestListSelectionFollowsItemIdentity();
+    TestListSelectById();
     TestListViewVisibleRange();
     std::printf("controls: %d/%d checks passed\n", run - failed, run);
     return failed == 0 ? 0 : 1;

@@ -46,6 +46,8 @@ O CMake declara a versão 0.6.0; isso não significa que uma release esteja publ
   - O visualizador opcional carrega Xmind Regular como fonte primária, gera um atlas Latin-1 de cobertura com métricas da fonte e aceita outro arquivo TTF/OTF por `--font`. Essa rasterização do visualizador usa GDI no Windows; não substitui HarfBuzz/FreeType, shaping complexo, bidi/RTL ou atlas MSDF de produção.
   - HarfBuzz/FreeType e bidi/RTL não estão integrados ao core.
 - **Renderização auxiliar:** Nine-Slice e painéis SDF arredondados; compilação DXIL do shader verificada localmente, sem validação em GPU real.
+- **Cantos arredondados por estilo:** janela, painel, menu (popup da barra e dropdown), campo de texto, dropdown e abas têm campo `cornerRadius` (padrão zero, retos). `AppendFill` e `AppendBox` (`Elements/Paint.hpp`) usam `MakeRoundedRect`, que prende o raio à metade do menor lado. O botão mantém o `cornerRadius` do próprio elemento (padrão 4, como antes). Capturas com fonte real: `raio-01` (janelas e botões com raio 0, 6 e 12) e `raio-02` (menu com raio 8); sem captura de campo, dropdown e abas com raio.
+- **UIBuilder (projeto):** ferramenta separada, sem codigo ainda. Formato JSON, caminho ate a arvore, regra de ajuste sem perda de campos, otimizacao de draw calls e cinco fases estao em `docs/UIBUILDER.md`.
 
 - **Persistência Segura (JSON):**
   - `UIConfigManager` com validação de `schemaVersion`, sanitização numérica por `ReadFiniteFloat`, staging atômico e commit transacional.
@@ -78,6 +80,7 @@ O CMake declara a versão 0.6.0; isso não significa que uma release esteja publ
 | Integração do editor ToolEngine sem dependência final de ImGui | Não iniciada; migração gradual planejada, com remoção do ImGui após paridade e regressão |
 | Adaptador SDL3 standalone: janela, mouse/foco, navegação teclado/gamepad, texto/IME e clipboard | Implementado e validado localmente com SDL 3.2.30; execução CI remota pendente; para ToolEngine, reutilizar `tool::IWindow` e encaminhar eventos/snapshot sem um segundo event loop |
 | Visualizador de qualidade de interface em janela | Abas selecionáveis, gradiente demonstrativo, botões flutuantes e fade via ToonMotion; build MSVC, CTest 5/5 e captura headless aprovados; desktop real/GPU fora do escopo |
+| UIBuilder (ferramenta de layout em JSON, executavel separado) | Em projeto: formato, fabrica, ajuste sem perda de campos, draw calls e fases com criterios de aceite em `docs/UIBUILDER.md`; sem codigo ainda | 
 | Multi-pointer routing no core | Implementado e coberto por teste com dois ponteiros simultâneos, click, cancelamento e entrada inválida |
 | SDL3 touch/finger e snapshots multi-pointer | Implementado e testado com SDL 3.2.30 (down/motion/up/cancel e dois contatos simultâneos) |
 | Adaptador GLFW | Pendente |

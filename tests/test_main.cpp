@@ -347,6 +347,146 @@ void TestHitTestTransformAndMaxFrameId() {
     CHECK(invalidEvents.empty());
 }
 
+void TestDisabledTargetDoesNotPassEvent() {
+    using namespace ToolEngine::SpriteUi::Input;
+
+    HitTarget behind;
+    behind.handle = {1, 1};
+    behind.localSize = {100, 100};
+    behind.paintOrder = 1;
+    behind.focusable = true;
+
+    HitTarget disabledOnTop = behind;
+    disabledOnTop.handle = {2, 1};
+    disabledOnTop.paintOrder = 2;
+    disabledOnTop.enabled = false;
+
+    const HitTarget targets[] = {behind, disabledOnTop};
+    UIEventRouter router;
+    UIInputSnapshot down;
+    down.frameId = 1;
+    down.pointerPositionLogical = {20, 20};
+    down.primaryPressed = true;
+    down.primaryDown = true;
+    const auto downEvents = router.Process(down, targets);
+    CHECK(router.GetState().consumedThisFrame);
+
+    UIInputSnapshot up;
+    up.frameId = 2;
+    up.pointerPositionLogical = {20, 20};
+    up.primaryReleased = true;
+    const auto upEvents = router.Process(up, targets);
+
+    bool reachedBehind = false;
+    for (const auto& event : downEvents) reachedBehind |= event.target == behind.handle;
+    for (const auto& event : upEvents) reachedBehind |= event.target == behind.handle;
+    CHECK(!reachedBehind);
+    CHECK(!router.GetState().capturedEntity.IsValid());
+    CHECK(!router.GetState().focusedEntity.IsValid());
+}
+
+bool ContainsEvent(const std::vector<Input::UIEvent>& events, Input::UIEventType type) {
+    for (const auto& event : events)
+        if (event.type == type) return true;
+    return false;
+}
+
+void TestClickRulesAndCancel() {
+    using namespace ToolEngine::SpriteUi::Input;
+
+    HitTarget target;
+    target.handle = {1, 1};
+    target.localSize = {100, 100};
+    target.paintOrder = 1;
+    const HitTarget targets[] = {target};
+
+    // Down inside, Up inside: Click.
+    UIEventRouter sameTarget;
+    UIInputSnapshot down;
+    down.frameId = 1;
+    down.pointerPositionLogical = {20, 20};
+    down.primaryPressed = true;
+    down.primaryDown = true;
+    sameTarget.Process(down, targets);
+    UIInputSnapshot up = down;
+    up.frameId = 2;
+    up.primaryPressed = false;
+    up.primaryDown = false;
+    up.primaryReleased = true;
+    CHECK(ContainsEvent(sameTarget.Process(up, targets), UIEventType::Click));
+
+    // Down inside, Up outside the target: no Click.
+    UIEventRouter releasedOutside;
+    releasedOutside.Process(down, targets);
+    up.pointerPositionLogical = {300, 300};
+    CHECK(!ContainsEvent(releasedOutside.Process(up, targets), UIEventType::Click));
+
+    // Cancel never produces Click.
+    UIEventRouter cancelled;
+    cancelled.Process(down, targets);
+    UIInputSnapshot cancel = up;
+    cancel.frameId = 3;
+    cancel.pointerPositionLogical = {20, 20};
+    cancel.primaryReleased = false;
+    cancel.pointerCancelled = true;
+    const auto cancelEvents = cancelled.Process(cancel, targets);
+    CHECK(ContainsEvent(cancelEvents, UIEventType::Cancel));
+    CHECK(!ContainsEvent(cancelEvents, UIEventType::Click));
+}
+
+void TestHoldIsDerivedFromFrameTime() {
+    using namespace ToolEngine::SpriteUi::Input;
+
+    HitTarget target;
+    target.handle = {1, 1};
+    target.localSize = {100, 100};
+    target.paintOrder = 1;
+    const HitTarget targets[] = {target};
+
+    UIEventRouter router;
+    UIInputSnapshot frame;
+    frame.pointerPositionLogical = {20, 20};
+    frame.frameId = 1;
+    frame.frameTimeSeconds = 10.0;
+    frame.primaryPressed = true;
+    frame.primaryDown = true;
+    router.Process(frame, targets);
+    CHECK(!router.GetState().holdActive);
+
+    frame.frameId = 2;
+    frame.frameTimeSeconds = 10.1;
+    frame.primaryPressed = false;
+    router.Process(frame, targets);
+    CHECK(!router.GetState().holdActive);
+
+    frame.frameId = 3;
+    frame.frameTimeSeconds = 10.25;
+    router.Process(frame, targets);
+    CHECK(router.GetState().holdActive);
+
+    frame.frameId = 4;
+    frame.frameTimeSeconds = 10.3;
+    frame.primaryDown = false;
+    frame.primaryReleased = true;
+    const auto releaseEvents = router.Process(frame, targets);
+    CHECK(!router.GetState().holdActive);
+    CHECK(ContainsEvent(releaseEvents, UIEventType::Click));
+
+    // The host clock is the only time source: a non-finite frame time never starts Hold.
+    UIEventRouter invalidTime;
+    UIInputSnapshot invalid;
+    invalid.frameId = 1;
+    invalid.pointerPositionLogical = {20, 20};
+    invalid.primaryPressed = true;
+    invalid.primaryDown = true;
+    invalid.frameTimeSeconds = std::numeric_limits<double>::quiet_NaN();
+    invalidTime.Process(invalid, targets);
+    invalid.frameId = 2;
+    invalid.primaryPressed = false;
+    invalidTime.Process(invalid, targets);
+    CHECK(!invalidTime.GetState().holdActive);
+}
+
 void TestEventBubblingAndHoverConsumption() {
     using namespace ToolEngine::SpriteUi::Input;
     HitTarget parent;
@@ -1418,6 +1558,9 @@ int main() {
     TestSemanticNavigationRouter();
     TestReviewRegressions();
     TestEventBubblingAndHoverConsumption();
+    TestDisabledTargetDoesNotPassEvent();
+    TestClickRulesAndCancel();
+    TestHoldIsDerivedFromFrameTime();
     TestCanvasConfig();
     TestWidgets();
     TestToonMotion();
